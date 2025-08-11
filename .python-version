@@ -1,9 +1,8 @@
 3.10
 # The dia library (nari-tts) needs librosa.
-# 
+#
 # librosa needs numba.
 #
 # The version of numba it's trying to install (0.53.1) needs llvmlite==0.36.0.
-# 
+#
 # The final RuntimeError is the smoking gun: llvmlite version 0.36.0 cannot be installed on any Python version higher than 3.10.
-

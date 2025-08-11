@@ -346,7 +346,6 @@ def chunk_to_5_10s(lines: List[Dict]) -> List[str]:
                 buf_seconds = 0.0
                 i += 1
 
-
     # leftover
     if buf:
         # try to merge with previous block if too short

@@ -17,12 +17,14 @@ def test_prompt_loading():
 
 def test_llm_injector_creation():
     """Test that we can create an LLM injector."""
+
     # Create a mock LLM
     class MockLLM:
         def invoke(self, messages):
             # Return a mock response
             class MockResponse:
                 content = "[S1] Hello there (laughs)"
+
             return MockResponse()
 
     # Build the injector

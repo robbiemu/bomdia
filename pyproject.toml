@@ -72,11 +72,11 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 exclude = [
-    "src/components/audio_generator/tests/", 
-    "src/components/transcript_parser/tests/", 
-    "src/components/verbal_tag_injector/tests/", 
-    "shared/tests", 
-    "tests/", 
+    "src/components/audio_generator/tests/",
+    "src/components/transcript_parser/tests/",
+    "src/components/verbal_tag_injector/tests/",
+    "shared/tests",
+    "tests/",
     "prototype.py"
     ]
 namespace_packages = true

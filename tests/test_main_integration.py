@@ -28,12 +28,13 @@ Speaker 2: Yes, perfect for a walk in the park."""
         def text_to_audio_file(self, text, path, max_new_tokens):
             # Create a dummy wav file with proper WAV format
             import wave
+
             import numpy as np
-            
+
             # Create a simple WAV file with minimal content
-            with wave.open(path, 'wb') as wav_file:
+            with wave.open(path, "wb") as wav_file:
                 wav_file.setnchannels(1)  # Mono
-                wav_file.setsampwidth(2)   # 16-bit
+                wav_file.setsampwidth(2)  # 16-bit
                 wav_file.setframerate(22050)  # Sample rate
                 # Create minimal audio data (0.1 seconds of silence)
                 frames = int(0.1 * 22050)
