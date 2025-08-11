@@ -81,20 +81,26 @@ class DiaTTS:
                            to audio file paths.
         """
         print("[DiaTTS] Generating speaker embeddings from audio prompts...")
-        # The Dia library's `generate_speaker_embedding` method is perfect for this.
-        self._speaker_embeddings = self.model.generate_speaker_embedding(
-            list(voice_prompts.values())
-        )
-
-        # We need to map them back to the speaker tags
-        prompt_speakers = list(voice_prompts.keys())
-        self._speaker_embeddings = {
-            speaker: embedding
-            for speaker, embedding in zip(
-                prompt_speakers, self._speaker_embeddings, strict=True
+        try:
+            # The Dia library's `generate_speaker_embedding` method is perfect for this.
+            self._speaker_embeddings = self.model.generate_speaker_embedding(
+                list(voice_prompts.values())
             )
-        }
-        print("[DiaTTS] Speaker embeddings registered successfully.")
+
+            # We need to map them back to the speaker tags
+            prompt_speakers = list(voice_prompts.keys())
+            self._speaker_embeddings = {
+                speaker: embedding
+                for speaker, embedding in zip(
+                    prompt_speakers, self._speaker_embeddings, strict=True
+                )
+            }
+            print("[DiaTTS] Speaker embeddings registered successfully.")
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to generate speaker embeddings from audio prompts: {str(e)}. "
+                "Please check that the audio files are valid and in a supported format."
+            ) from e
 
     def text_to_audio_file(self, text: str, out_path: str) -> str:
         """
