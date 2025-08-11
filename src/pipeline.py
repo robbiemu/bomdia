@@ -3,6 +3,7 @@
 This file contains the core pipeline for converting a transcript to a podcast.
 """
 
+import logging
 import os
 import shutil
 import tempfile
@@ -21,6 +22,9 @@ from src.components.transcript_parser import (
     merge_consecutive_lines,
 )
 from src.components.verbal_tag_injector.director import Director
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 # ---- TOP-LEVEL pipeline ----
@@ -71,7 +75,9 @@ def run_pipeline(
         if not config.LLM_SPEC:
             # Handle the case where no LLM is available (e.g., run a simplified
             #  rule-based pass or exit)
-            print("WARN: LLM not available. Skipping advanced transcript enhancement.")
+            logger.warning(
+                "LLM not available. Skipping advanced transcript enhancement."
+            )
             processed = lines  # Fallback to un-enhanced lines
         else:
             director = Director(transcript=lines)
@@ -86,8 +92,8 @@ def run_pipeline(
                 raise ValueError(
                     "No mini-transcripts generated from the input"
                 ) from None
-            print(
-                f"[pipeline] Produced {len(mini_transcripts)} mini-transcript blocks "
+            logger.info(
+                f"Produced {len(mini_transcripts)} mini-transcript blocks "
                 f"(5-10s preferred)."
             )
         except Exception as e:
@@ -105,15 +111,15 @@ def run_pipeline(
             try:
                 for i, block in enumerate(mini_transcripts):
                     out_wav = os.path.join(tmp_dir, f"block_{i:04d}.wav")
-                    print(
-                        f"[TTS] Generating block {i + 1}/{len(mini_transcripts)} -> "
+                    logger.info(
+                        f"Generating block {i + 1}/{len(mini_transcripts)} -> "
                         f"{out_wav} ..."
                     )
                     tts.text_to_audio_file(block, out_wav)
                     seg_paths.append(out_wav)
 
                 # Concatenate with pydub
-                print("[audio] Concatenating audio segments ...")
+                logger.info("Concatenating audio segments ...")
                 combined = None
                 for p in seg_paths:
                     seg = AudioSegment.from_wav(p)
@@ -129,9 +135,9 @@ def run_pipeline(
                 # Ensure output directory exists
                 os.makedirs(os.path.dirname(out_audio_path) or ".", exist_ok=True)
 
-                print(f"[audio] Exporting final to {out_audio_path} ...")
+                logger.info(f"Exporting final to {out_audio_path} ...")
                 combined.export(out_audio_path, format="mp3")
-                print("[pipeline] Done.")
+                logger.info("Done.")
             except Exception as e:
                 raise RuntimeError(f"Failed during TTS generation: {str(e)}") from e
             finally:
@@ -145,25 +151,25 @@ def run_pipeline(
         # Top-level error handling
         error_type = type(e).__name__
         error_msg = str(e)
-        print(f"\n[ERROR] Pipeline failed with {error_type}: {error_msg}")
+        logger.error(f"Pipeline failed with {error_type}: {error_msg}")
 
         # Provide more context based on error type
         if "CUDA" in error_msg or "GPU" in error_msg:
-            print("\nTroubleshooting tips:")
-            print("- Ensure you have a CUDA-enabled GPU")
-            print("- Check if you have enough VRAM (Dia model requires ~10GB)")
-            print("- Verify PyTorch is installed with CUDA support")
+            logger.info("\nTroubleshooting tips:")
+            logger.info("- Ensure you have a CUDA-enabled GPU")
+            logger.info("- Check if you have enough VRAM (Dia model requires ~10GB)")
+            logger.info("- Verify PyTorch is installed with CUDA support")
         elif "API_KEY" in error_msg:
-            print("\nTroubleshooting tips:")
-            print("- Set OPENAI_API_KEY environment variable")
-            print("- Check your API key is valid and has sufficient quota")
+            logger.info("\nTroubleshooting tips:")
+            logger.info("- Set OPENAI_API_KEY environment variable")
+            logger.info("- Check your API key is valid and has sufficient quota")
         elif "FileNotFoundError" in error_type:
-            print("\nTroubleshooting tips:")
-            print("- Verify the input file path is correct")
-            print("- Check file permissions")
+            logger.info("\nTroubleshooting tips:")
+            logger.info("- Verify the input file path is correct")
+            logger.info("- Check file permissions")
         elif "UnicodeDecodeError" in error_type:
-            print("\nTroubleshooting tips:")
-            print("- Check file encoding")
-            print("- Try converting the file to UTF-8")
+            logger.info("\nTroubleshooting tips:")
+            logger.info("- Check file encoding")
+            logger.info("- Try converting the file to UTF-8")
 
         raise  # Re-raise the exception to be caught by CLI

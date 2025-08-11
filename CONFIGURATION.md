@@ -279,3 +279,19 @@ Perform ONLY the following line:
    ```bash
    env | grep -E "(LLM|API|OPENAI|MISTRAL|OPENROUTER)"
    ```
+
+## Logging and Observability
+
+The application uses Python's standard `logging` module for all output. There are two layers of observability:
+
+1. **Default Logging System**: All application output is now handled through a configurable logging system with controllable verbosity via CLI flags:
+   - `-v`, `--verbose`: Sets logging level to INFO
+   - `--verbosity {DEBUG,INFO,WARNING,ERROR}`: Sets a specific logging level
+
+2. **LangSmith Tracing** (Optional): For developers who need detailed tracing information, LangSmith integration can be enabled by setting the appropriate environment variables:
+   - `LANGCHAIN_TRACING_V2=true`
+   - `LANGCHAIN_ENDPOINT=https://api.smith.langchain.com`
+   - `LANGCHAIN_API_KEY=your-langsmith-api-key`
+   - `LANGCHAIN_PROJECT=your-project-name`
+
+The LangSmith integration requires no application-level configuration and is managed solely by these environment variables. The application runs without error or warning if they are not set.

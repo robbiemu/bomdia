@@ -3,8 +3,13 @@
 import re
 from typing import Dict, List
 
+from shared.logging import get_logger
 
-def parse_simple_txt(path: str) -> List[Dict]:
+# Initialize logger
+logger = get_logger(__name__)
+
+
+def parse_simple_txt(path: str) -> List[Dict[str, str]]:
     """
     Parse simple transcript text files with basic speaker tagging.
 
@@ -33,41 +38,57 @@ def parse_simple_txt(path: str) -> List[Dict]:
     Returns:
         List[Dict]: List of dictionaries with 'speaker' and 'text' keys.
     """
-    with open(path, "r", encoding="utf-8") as f:
-        raw_lines = [ln.strip() for ln in f.readlines() if ln.strip()]
-
+    logger.debug(f"Parsing simple TXT transcript: {path}")
     parsed = []
     speakers_map = {}  # name -> S1/S2
     next_speaker_id = 1
 
-    for ln in raw_lines:
-        # bracketed form
-        m = re.match(r"^\[?(S\d+)\]?\s*(.*)$", ln)
-        if m:
-            speaker = m.group(1)
-            text = m.group(2).strip()
-            parsed.append({"speaker": speaker, "text": text})
-            continue
-        # "Name: ... " form
-        m2 = re.match(r"^([A-Za-z0-9 _\-]+?):\s*(.*)$", ln)
-        if m2:
-            name = m2.group(1).strip()
-            text = m2.group(2).strip()
-            if name not in speakers_map:
-                tag = f"S{next_speaker_id}"
-                speakers_map[name] = tag
-                next_speaker_id += 1
-            parsed.append({"speaker": speakers_map[name], "text": text})
-            continue
-        # fallback: treat as continuation of previous speaker if any, else S1
-        if parsed:
-            parsed[-1]["text"] += " " + ln
-        else:
-            parsed.append({"speaker": "S1", "text": ln})
+    with open(path, "r", encoding="utf-8") as f:
+        line_number = 0
+        for line in f:
+            line_number += 1
+            ln = line.rstrip("\r\n")  # Remove both \r and \n
+            logger.debug(f"Processing line {line_number}: '{ln}'")
+            if not ln.strip():
+                logger.debug(f"Skipping empty line {line_number}")
+                continue
+
+            # bracketed form
+            m = re.match(r"^\[?(S\d+)\]?\s*(.*)$", ln)
+            if m:
+                speaker = m.group(1)
+                text = m.group(2).rstrip()
+                logger.debug(
+                    f"Matched bracketed form: speaker={speaker}, text='{text}'"
+                )
+                parsed.append({"speaker": speaker, "text": text})
+                continue
+            # "Name: ... " form - fix the regex to properly match names
+            m2 = re.match(r"^([A-Za-z0-9 _\-\u2014\u2013]+?):\s*(.*)$", ln)
+            if m2:
+                name = m2.group(1).strip()
+                text = m2.group(2).rstrip()
+                logger.debug(f"Matched name form: name={name}, text='{text}'")
+                if name not in speakers_map:
+                    tag = f"S{next_speaker_id}"
+                    speakers_map[name] = tag
+                    next_speaker_id += 1
+                parsed.append({"speaker": speakers_map[name], "text": text})
+                continue
+            # fallback: treat as continuation of previous speaker if any, else S1
+            logger.debug("Treating as continuation or first line")
+            if parsed:
+                parsed[-1]["text"] += " " + ln
+            else:
+                parsed.append({"speaker": "S1", "text": ln})
+
+    logger.info(f"Successfully parsed {len(parsed)} lines from TXT transcript")
+    for i, parsed_line in enumerate(parsed):
+        logger.debug(f"Parsed line {i+1}: {parsed_line}")
     return parsed
 
 
-def parse_srt(path: str) -> List[Dict]:
+def parse_srt(path: str) -> List[Dict[str, str]]:
     """
     Extremely-primitive .srt parser that extracts text content while ignoring timestamps
     and speaker information.
@@ -83,6 +104,7 @@ def parse_srt(path: str) -> List[Dict]:
     Returns:
         List[Dict]: List of dictionaries with 'speaker' (default 'S1') and 'text' keys.
     """
+    logger.debug(f"Parsing SRT transcript: {path}")
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
     # split numbered blocks
@@ -101,10 +123,13 @@ def parse_srt(path: str) -> List[Dict]:
             candidate = " ".join(lines)
         # no speaker info in srt - push as S1 by default
         parsed.append({"speaker": "S1", "text": candidate})
+
+    logger.info(f"Successfully parsed {len(parsed)} blocks from SRT transcript")
     return parsed
 
 
 def ingest_transcript(path: str) -> List[Dict]:
+    logger.info(f"Ingesting transcript from: {path}")
     if path.lower().endswith(".srt"):
         return parse_srt(path)
     else:

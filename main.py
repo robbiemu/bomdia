@@ -19,9 +19,11 @@ Requirements / notes:
 """
 
 import argparse
+import logging
 import os
 
 from pydub import AudioSegment
+from shared.logging import setup_logger
 from src.pipeline import run_pipeline
 
 
@@ -35,9 +37,11 @@ def validate_audio_file(file_path: str) -> bool:
     Returns:
         bool: True if validation passes, False otherwise
     """
+    logger = logging.getLogger(__name__)
+
     # Check if file exists
     if not os.path.exists(file_path):
-        print(f"ERROR: Audio file not found: {file_path}")
+        logger.error(f"Audio file not found: {file_path}")
         return False
 
     try:
@@ -52,47 +56,47 @@ def validate_audio_file(file_path: str) -> bool:
         # Validate file format (WAV is preferred)
         is_wav = file_path.lower().endswith(".wav")
         if not is_wav:
-            print(
-                f"WARNING: Audio file '{file_path}' is not WAV format. "
+            logger.warning(
+                f"Audio file '{file_path}' is not WAV format. "
                 f"MP3 or other compressed formats may introduce artifacts."
             )
 
         # Validate sample rate (16-bit, 22050 Hz or 44100 Hz recommended)
         if sample_rate not in [22050, 44100]:
-            print(
-                f"WARNING: Audio file '{file_path}' has sample rate {sample_rate} Hz. "
+            logger.warning(
+                f"Audio file '{file_path}' has sample rate {sample_rate} Hz. "
                 f"Use 22050 Hz or 44100 Hz for best results."
             )
 
         # Validate bit depth (16-bit recommended)
         if sample_width != 16:
-            print(
-                f"WARNING: Audio file '{file_path}' has bit depth {sample_width}-bit. "
+            logger.warning(
+                f"Audio file '{file_path}' has bit depth {sample_width}-bit. "
                 f"Use 16-bit for best results."
             )
 
         # Validate audio length (ideal 5-15 seconds)
         duration_sec = duration_ms / 1000
         if duration_sec < 3:
-            print(
-                f"WARNING: Audio file '{file_path}' is too short "
+            logger.warning(
+                f"Audio file '{file_path}' is too short "
                 f"({duration_sec:.2f}s). Minimum 3-4 seconds recommended."
             )
         elif duration_sec > 20:
-            print(
-                f"WARNING: Audio file '{file_path}' is too long ({duration_sec:.2f}s). "
+            logger.warning(
+                f"Audio file '{file_path}' is too long ({duration_sec:.2f}s). "
                 f"Maximum 20 seconds recommended."
             )
         elif not (5 <= duration_sec <= 15):
-            print(
-                f"NOTE: Audio file '{file_path}' length ({duration_sec:.2f}s) "
+            logger.info(
+                f"Audio file '{file_path}' length ({duration_sec:.2f}s) "
                 f"is outside ideal range (5-15s)."
             )
 
         return True
 
     except Exception as e:
-        print(f"ERROR: Failed to load audio file '{file_path}': {str(e)}")
+        logger.error(f"Failed to load audio file '{file_path}': {str(e)}")
         return False
 
 
@@ -107,8 +111,10 @@ def validate_file_exists(file_path: str, file_description: str) -> bool:
     Returns:
         bool: True if file exists, False otherwise
     """
+    logger = logging.getLogger(__name__)
+
     if not os.path.exists(file_path):
-        print(f"ERROR: {file_description} not found: {file_path}")
+        logger.error(f"{file_description} not found: {file_path}")
         return False
     return True
 
@@ -131,8 +137,36 @@ if __name__ == "__main__":
     parser.add_argument(
         "--s2-voice", type=str, help="Path to an audio prompt file for Speaker 2."
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Set logging level to INFO. Useful for seeing standard process flow.",
+    )
+    parser.add_argument(
+        "--verbosity",
+        type=str,
+        default="WARNING",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Set a specific logging level.",
+    )
 
     args = parser.parse_args()
+
+    # Determine logging level
+    if args.verbosity != "WARNING":
+        # --verbosity flag takes precedence
+        log_level = getattr(logging, args.verbosity)
+    elif args.verbose:
+        # -v flag sets level to INFO
+        log_level = logging.INFO
+    else:
+        # Default level
+        log_level = logging.WARNING
+
+    # Initialize logger
+    setup_logger(log_level)
+    logger = logging.getLogger(__name__)
 
     # Validate input file exists
     if not validate_file_exists(args.input_path, "Input transcript file"):
@@ -144,14 +178,14 @@ if __name__ == "__main__":
         if not validate_file_exists(args.s1_voice, "Speaker 1 voice prompt file"):
             exit(1)
         if not validate_audio_file(args.s1_voice):
-            print("ERROR: Speaker 1 voice prompt file failed validation.")
+            logger.error("Speaker 1 voice prompt file failed validation.")
             exit(1)
         voice_prompts["S1"] = args.s1_voice
     if args.s2_voice:
         if not validate_file_exists(args.s2_voice, "Speaker 2 voice prompt file"):
             exit(1)
         if not validate_audio_file(args.s2_voice):
-            print("ERROR: Speaker 2 voice prompt file failed validation.")
+            logger.error("Speaker 2 voice prompt file failed validation.")
             exit(1)
         voice_prompts["S2"] = args.s2_voice
 
@@ -164,5 +198,5 @@ if __name__ == "__main__":
             seed=args.seed,
         )
     except Exception as e:
-        print(f"Pipeline execution failed: {str(e)}")
+        logger.error(f"Pipeline execution failed: {str(e)}")
         exit(1)

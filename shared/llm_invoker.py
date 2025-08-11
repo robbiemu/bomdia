@@ -1,7 +1,11 @@
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import litellm
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 # Step 1: Define a simple, predictable response structure.
@@ -55,6 +59,6 @@ class LiteLLMInvoker:
             return LLMResponse(content=content.strip())
 
         except Exception as e:
-            print(f"ERROR: LiteLLM call to model '{self.model}' failed: {e}")
+            logger.error(f"LiteLLM call to model '{self.model}' failed: {e}")
             # Return a standardized empty response on failure
             return LLMResponse(content="")

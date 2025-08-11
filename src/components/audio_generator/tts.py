@@ -1,9 +1,13 @@
+import logging
 import random
 from typing import Dict, Optional
 
 import numpy as np
 import torch
 from dia.model import Dia
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 def _get_default_device() -> torch.device:
@@ -38,8 +42,8 @@ class DiaTTS:
             device = _get_default_device().type
         self.device = device
 
-        print(
-            f"[DiaTTS] Loading model {model_checkpoint} via official Dia library on "
+        logger.info(
+            f"Loading model {model_checkpoint} via official Dia library on "
             f"device {self.device}..."
         )
 
@@ -48,7 +52,7 @@ class DiaTTS:
         compute_dtype = torch.float16 if self.device == "cuda" else torch.float32
 
         if seed is not None:
-            print("[DiaTTS] Setting seed to '{seed}' for voice selection")
+            logger.info(f"Setting seed to '{seed}' for voice selection")
             self._set_seed(seed)
 
         # The Dia library handles device placement internally.
@@ -59,7 +63,7 @@ class DiaTTS:
             device=self.device,
         )
 
-        print("[DiaTTS] Model loaded successfully.")
+        logger.info("Model loaded successfully.")
 
     def _set_seed(self, seed: int) -> None:
         """Sets the random seed for reproducibility."""
@@ -80,7 +84,7 @@ class DiaTTS:
             voice_prompts: A dictionary mapping speaker tags (e.g., 'S1')
                            to audio file paths.
         """
-        print("[DiaTTS] Generating speaker embeddings from audio prompts...")
+        logger.info("Generating speaker embeddings from audio prompts...")
         try:
             # The Dia library's `generate_speaker_embedding` method is perfect for this.
             self._speaker_embeddings = self.model.generate_speaker_embedding(
@@ -95,7 +99,7 @@ class DiaTTS:
                     prompt_speakers, self._speaker_embeddings, strict=True
                 )
             }
-            print("[DiaTTS] Speaker embeddings registered successfully.")
+            logger.info("Speaker embeddings registered successfully.")
         except Exception as e:
             raise RuntimeError(
                 f"Failed to generate speaker embeddings from audio prompts: {str(e)}. "
@@ -115,13 +119,13 @@ class DiaTTS:
         Returns:
             str: The path to the output audio file.
         """
-        print(f"[DiaTTS] Generating audio for: '{text}...'")
+        logger.info(f"Generating audio for: '{text}...'")
 
         # The `use_torch_compile` flag is crucial for compatibility, especially
         #  on non-Linux systems.
         audio_output = self.model.generate(text, use_torch_compile=False, verbose=True)
 
-        print(f"[DiaTTS] Saving audio to {out_path}...")
+        logger.info(f"Saving audio to {out_path}...")
         self.model.save_audio(out_path, audio_output)
 
         return out_path

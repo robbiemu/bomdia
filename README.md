@@ -27,6 +27,25 @@ pip install -e .
 bomdia input_transcript.txt output_podcast.mp3
 ```
 
+### Verbosity Control
+
+The application provides two flags for controlling output verbosity:
+
+- `-v`, `--verbose`: Sets logging level to INFO, showing standard process flow
+- `--verbosity {DEBUG,INFO,WARNING,ERROR}`: Sets a specific logging level
+
+Examples:
+```bash
+# Show standard process flow
+bomdia -v input_transcript.txt output_podcast.mp3
+
+# Show detailed debugging information
+bomdia --verbosity DEBUG input_transcript.txt output_podcast.mp3
+
+# Show only errors and warnings (default)
+bomdia input_transcript.txt output_podcast.mp3
+```
+
 ## Configuration
 
 ### LLM Configuration

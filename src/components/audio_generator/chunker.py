@@ -4,6 +4,10 @@ import re
 from typing import List
 
 from shared.config import config
+from shared.logging import get_logger
+
+# Initialize logger
+logger = get_logger(__name__)
 
 
 def estimate_seconds_for_text(text: str) -> float:
@@ -30,6 +34,7 @@ def chunk_to_5_10s(lines: List[dict]) -> List[str]:
     Returns:
         List[str]: List of transcript blocks as strings, each 5-10 seconds long.
     """
+    logger.debug(f"Chunking {len(lines)} lines into 5-10s blocks")
     blocks = []
     buf = []
     buf_seconds = 0.0
@@ -45,6 +50,9 @@ def chunk_to_5_10s(lines: List[dict]) -> List[str]:
         sec = estimate_seconds_for_text(ln["text"])
         # if single line longer than 10s: split crude by sentence punctuation
         if sec > 10:
+            logger.debug(
+                f"Splitting long line ({sec:.1f}s) for speaker {ln['speaker']}"
+            )
             # naive split
             parts = re.split(r"(?<=[.?!])\\s+", ln["text"])
             parts = [p.strip() for p in parts if p.strip()]
@@ -98,4 +106,6 @@ def chunk_to_5_10s(lines: List[dict]) -> List[str]:
             blocks[-1] = blocks[-1] + "\n" + "\n".join(buf)
         else:
             blocks.append("\n".join(buf))
+
+    logger.info(f"Produced {len(blocks)} mini-transcript blocks (5-10s preferred)")
     return blocks
