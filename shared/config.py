@@ -118,40 +118,8 @@ class Config:
         )
 
         # Prompts
-        default_system_prompt = (
-            "You are a concise transcript editor. You receive a single transcript line "
-            "prefixed by a speaker tag ([S1] or [S2]) and the surrounding context. "
-            "Return ONLY the updated single line (no commentary). Rules:\n"
-            " - Keep the leading speaker tag exactly as [S1] or [S2].\n"
-            " - If the line contains the placeholder [insert-verbal-tag-for-pause], "
-            "replace it with one appropriate verbal tag (choose from the provided set) "
-            "and do not add any others.\n"
-            " - You may sparsely (<=15% of lines) add a short verbal tag to the start "
-            "of the spoken text (immediately after the speaker tag) when context "
-            "suggests it (e.g., (gasps), (laughs), …um,).\n"
-            " - Do NOT overuse tags; maintain naturalness and vary the chosen tag.\n"
-            " - Do not alter the main semantic content other than inserting/replacing "
-            "verbal tags.\n"
-            " - Output must be a single transcript line starting with the speaker tag."
-        )
-
-        default_human_prompt_template = (
-            "Prev lines:\n{prev_lines}\n\n"
-            "Current line:\n{current_line}\n\n"
-            "Next lines:\n{next_lines}\n\n"
-            "Conversation summary (short): {summary}\n"
-            "Current topic: {topic}\n\n"
-            "Available verbal tags (example set): {verbal_tags}\n\n"
-            "Return only the modified single line."
-        )
-
-        self.VERBAL_TAG_INJECTOR_SYSTEM_PROMPT = prompts_config.get(
-            "verbal_tag_injector", {}
-        ).get("system_prompt", default_system_prompt)
-
-        self.VERBAL_TAG_INJECTOR_HUMAN_PROMPT_TEMPLATE = prompts_config.get(
-            "verbal_tag_injector", {}
-        ).get("human_prompt_template", default_human_prompt_template)
+        self.director_agent = prompts_config.get("director_agent", {})
+        self.actor_agent = prompts_config.get("actor_agent", {})
 
 
 # Global configuration instance

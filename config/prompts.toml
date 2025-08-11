@@ -1,30 +1,54 @@
-# Prompts for the verbal tag injector
+[director_agent]
+# Prompt for the Director's initial, one-time analysis of the entire script.
+global_summary_prompt = """
+You are a script analyst. Read the entire following transcript and provide a concise summary covering three key areas. This summary will be used to guide another AI in performing the dialogue, so clarity and insight are crucial.
 
-[verbal_tag_injector]
-system_prompt = """
-You are a concise transcript editor. You receive a single transcript line prefixed by a speaker tag ([S1] or [S2]) and the surrounding context. Return ONLY the updated single line (no commentary). Rules:
- - Keep the leading speaker tag exactly as [S1] or [S2].
- - If the line contains the placeholder [insert-verbal-tag-for-pause], replace it with one appropriate verbal tag (choose from the provided set) and do not add any others.
- - You may sparsely (<=15% of lines) add a short verbal tag to the start of the spoken text (immediately after the speaker tag) when context suggests it (e.g., (gasps), (laughs), …um,).
- - Do NOT overuse tags; maintain naturalness and vary the chosen tag.
- - Do not alter the main semantic content other than inserting/replacing verbal tags.
- - Output must be a single transcript line starting with the speaker tag.
+1.  **Overall Topic:** What is the main subject of the conversation?
+2.  **Speaker Relationship:** Describe the dynamic between the speakers (e.g., friendly colleagues, confrontational rivals, interviewer and subject).
+3.  **Emotional Arc:** Describe the flow of emotion from the beginning to the end of the conversation (e.g., "Starts with lighthearted banter, moves to a serious disagreement, and ends with a reluctant compromise.").
+
+Here is the transcript:
+---
+{transcript_text}
+---
 """
 
-human_prompt_template = """
-Prev lines:
-{prev_lines}
+unified_moment_analysis_prompt = """
+You are an acting coach providing a quick note. Analyze this brief exchange, focusing ONLY on the speaker of the 'Current Line'.
 
-Current line:
+Return a JSON object with two keys:
+- "moment_summary": A third-person analysis of the speaker's emotional state and intention.
+- "directors_note": A first-person, actionable command for the Actor.
+
+**Exchange:**
+{local_context}
+
+**Current Line:**
 {current_line}
+"""
 
-Next lines:
-{next_lines}
+quota_exceeded_note = """
+(Automated message: The production's budget for verbal tags has been met. Do not add any new parenthetical tags.)
+"""
 
-Conversation summary (short): {summary}
-Current topic: {topic}
+[actor_agent]
+# Template for the Actor's main task. This will be formatted with context by the Director.
+task_directive_template = """
+You are a voice actor performing a line from a script. Your performance should be natural and enhance the written dialogue.
 
-Available verbal tags (example set): {verbal_tags}
+**Context:**
+- **Global Summary:** {global_summary}
+- **Local Context (The lines immediately surrounding yours):**
+{local_context}
+- **Director's Interpretation of the Moment:** {moment_summary}
+- **Director's Notes:** {directors_notes}
 
-Return only the modified single line.
+**Your Task:**
+Perform ONLY the following line:
+**Current Line:** {current_line}
+
+**Performance Rules:**
+1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally. Replace it with an appropriate verbal hesitation (e.g., "…um,", "— hmm —", "(sighs)"). If no verbalization feels right, you MUST replace it with a single space to connect the parts.
+2.  **Regarding New Verbal Tags:** You may add ONE short verbal tag (e.g., "(laughs)", "(gasps)") to the beginning of the line, but ONLY if it is strongly motivated by the emotional context. Do not add tags arbitrarily.
+3.  **Output:** Return ONLY the single, modified line of dialogue. Do not include the speaker tag (e.g., `[S1]`) or any commentary.
 """

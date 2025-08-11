@@ -10,11 +10,11 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
     # Create a temporary transcript file
     transcript_path = tmp_path / "transcript.txt"
     transcript_path.write_text(
-        """Speaker 1: Hello there
-Speaker 2: Hi, how are you?
-Speaker 1: I'm doing well, thanks for asking.
-Speaker 1: It's a beautiful day today.
-Speaker 2: Yes, perfect for a walk in the park."""
+        """[S1] Hello there
+[S2] Hi, how are you?
+[S1] I'm doing well, thanks for asking.
+[S1] It's a beautiful day today.
+[S2] Yes, perfect for a walk in the park."""
     )
 
     # Create a temporary output file path
@@ -42,6 +42,35 @@ Speaker 2: Yes, perfect for a walk in the park."""
                 wav_file.writeframes(data.tobytes())
 
     monkeypatch.setattr("src.pipeline.DiaTTS", MockDiaTTS)
+
+    # Mock the LLM invoker to avoid network calls
+    class MockLLMInvoker:
+        def __init__(self, model, **kwargs):
+            pass
+
+        def invoke(self, messages):
+            # Mock response for the global summary
+            if "You are a script analyst" in messages[0]["content"]:
+                class MockResponse:
+                    content = "Topic: Greeting. Relationship: Friendly. Arc: Positive."
+                return MockResponse()
+
+            # Mock response for the unified moment analysis
+            class MockResponse:
+                content = '{"moment_summary": "Friendly greeting", "directors_note": "Be warm and welcoming"}'
+            return MockResponse()
+
+    monkeypatch.setattr("src.components.verbal_tag_injector.director.LiteLLMInvoker", MockLLMInvoker)
+
+    # Mock the actor's get_actor_suggestion function
+    def mock_get_actor_suggestion(briefing_packet, llm_invoker):
+        # Simple mock that just returns the current line with a verbal tag
+        current_line = briefing_packet["current_line"]
+        if "[insert-verbal-tag-for-pause]" in current_line:
+            return current_line.replace("[insert-verbal-tag-for-pause]", "(um)")
+        return current_line
+
+    monkeypatch.setattr("src.components.verbal_tag_injector.director.get_actor_suggestion", mock_get_actor_suggestion)
 
     # Run the pipeline
     run_pipeline(str(transcript_path), str(output_path))

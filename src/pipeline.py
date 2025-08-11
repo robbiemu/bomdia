@@ -4,60 +4,23 @@ This file contains the core pipeline for converting a transcript to a podcast.
 """
 
 import os
-import random
-import re
 import shutil
 import tempfile
 from typing import Dict, Optional
 
-# LangGraph + LangChain (for LLM)
-from langgraph.graph import START, StateGraph
-from langgraph.pregel import Pregel
 from pydub import AudioSegment
-
-# Import config
 from shared.config import config
 
+# Import components from src/
 from src.components.audio_generator import (
     DiaTTS,
     chunk_to_5_10s,
 )
-
-# Import components from src/
 from src.components.transcript_parser import (
     ingest_transcript,
     merge_consecutive_lines,
 )
-from src.components.verbal_tag_injector import (
-    VerbalTagInjectorState,
-    build_llm_injector,
-    rule_based_injector,
-)
-
-
-# ---- LangGraph sub-agent (injector) ----
-def build_langgraph_injector() -> Pregel:
-    """
-    Construct a simple LangGraph StateGraph with a single node `inject_line`.
-    The node uses the LLM-based injector if configured, otherwise falls back
-    to the rule-based one.
-    """
-
-    def inject_node(state: VerbalTagInjectorState) -> Dict[str, str]:
-        # Decide which injector to use based on config
-        if config.LLM_SPEC:
-            # Use the LLM-based injector from our component
-            llm_injector_func = build_llm_injector()
-            return llm_injector_func(state)
-        else:
-            # Fallback to rule-based
-            return rule_based_injector(state)
-
-    builder = StateGraph(VerbalTagInjectorState)
-    builder.add_node("inject_line", inject_node)
-    builder.add_edge(START, "inject_line")
-    graph = builder.compile()
-    return graph
+from src.components.verbal_tag_injector.director import Director
 
 
 # ---- TOP-LEVEL pipeline ----
@@ -104,73 +67,17 @@ def run_pipeline(
         except Exception as e:
             raise RuntimeError(f"Failed to normalize transcript: {str(e)}") from e
 
-        # The decision is now inside the graph builder
-        graph = build_langgraph_injector()
-
-        # Simple summary / topic
-        try:
-            convo_summary = "A short conversational summary (MVP): " + " ".join(
-                [ln["text"] for ln in lines[:6]]
-            )
-            current_topic = lines[0]["text"].split()[0:6] if lines else "general"
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to generate conversation summary: {str(e)}"
-            ) from e
-
-        # Process each line through LangGraph sub-agent
-        try:
-            processed = []
-            for idx, ln in enumerate(lines):
-                prev_lines = [
-                    f"[{line['speaker']}] {line['text']}"
-                    for line in lines[max(0, idx - config.CONTEXT_WINDOW) : idx]
-                ]
-                next_lines = [
-                    f"[{line['speaker']}] {line['text']}"
-                    for line in lines[idx + 1 : idx + 1 + config.CONTEXT_WINDOW]
-                ]
-                state_in = {
-                    "prev_lines": prev_lines,
-                    "current_line": f"[{ln['speaker']}] {ln['text']}",
-                    "next_lines": next_lines,
-                    "summary": convo_summary,
-                    "topic": (
-                        " ".join(current_topic)
-                        if isinstance(current_topic, list)
-                        else str(current_topic)
-                    ),
-                }
-                try:
-                    result = graph.invoke(state_in)
-                    modified = result.get("modified_line") or state_in["current_line"]
-                except Exception as e:
-                    print(
-                        f"[pipeline] LangGraph injector failed for line {idx}: {str(e)}"
-                    )
-                    modified = state_in["current_line"]
-                    if config.PAUSE_PLACEHOLDER in modified:
-                        if not isinstance(modified, str):
-                            raise TypeError(
-                                f"Expected a string for the modified line, got "
-                                f"{type(modified)}"
-                            ) from e
-                        modified = modified.replace(
-                            config.PAUSE_PLACEHOLDER,
-                            random.choice(config.VERBAL_TAGS),  # nosec
-                        )
-                if not isinstance(modified, str):
-                    raise TypeError(
-                        f"Expected a string for the modified line, got {type(modified)}"
-                    )
-                processed.append(
-                    {
-                        "speaker": ln["speaker"],
-                        "text": re.sub(r"^\[S[12]\]\s*", "", modified),
-                    }
-                )
-        except Exception as e:
-            raise RuntimeError(f"Failed to process transcript lines: {str(e)}") from e
+        # ... after lines are ingested and merged
+        if not config.LLM_SPEC:
+            # Handle the case where no LLM is available (e.g., run a simplified
+            #  rule-based pass or exit)
+            print("WARN: LLM not available. Skipping advanced transcript enhancement.")
+            processed = lines  # Fallback to un-enhanced lines
+        else:
+            director = Director(transcript=lines)
+            processed_lines_dict = director.run_rehearsal()
+            # The output needs to be structured like the original 'processed' list
+            processed = processed_lines_dict
 
         # Chunk into 5-10s mini transcripts
         try:
