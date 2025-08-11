@@ -10,11 +10,9 @@ import shutil
 import tempfile
 from typing import Dict, Optional
 
-# TTS / Dia
-from langchain.chat_models import init_chat_model
-
 # LangGraph + LangChain (for LLM)
 from langgraph.graph import START, StateGraph
+from langgraph.pregel import Pregel
 from pydub import AudioSegment
 
 # Import config
@@ -31,35 +29,31 @@ from src.components.transcript_parser import (
     merge_consecutive_lines,
 )
 from src.components.verbal_tag_injector import (
+    VerbalTagInjectorState,
     build_llm_injector,
     rule_based_injector,
 )
 
 
 # ---- LangGraph sub-agent (injector) ----
-def build_langgraph_injector(llm=None):  # type: ignore
+def build_langgraph_injector() -> Pregel:
     """
     Construct a simple LangGraph StateGraph with a single node `inject_line`.
-    The node expects state keys:
-      prev_lines: List[str]
-      current_line: str
-      next_lines: List[str]
-      summary: str
-      topic: str
-    and returns {'modified_line': '...'}
-    If llm is None, the node uses the fallback rule-based injector.
+    The node uses the LLM-based injector if configured, otherwise falls back
+    to the rule-based one.
     """
 
-    def inject_node(state):  # type: ignore
-        # prefer LLM if provided
-        if llm is None:
+    def inject_node(state: VerbalTagInjectorState) -> Dict[str, str]:
+        # Decide which injector to use based on config
+        if config.LLM_SPEC:
+            # Use the LLM-based injector from our component
+            llm_injector_func = build_llm_injector()
+            return llm_injector_func(state)
+        else:
+            # Fallback to rule-based
             return rule_based_injector(state)
 
-        # Use the LLM-based injector from our component
-        llm_injector = build_llm_injector(llm)
-        return llm_injector(state)
-
-    builder = StateGraph(dict)  # basic untyped StateGraph for MVP
+    builder = StateGraph(VerbalTagInjectorState)
     builder.add_node("inject_line", inject_node)
     builder.add_edge(START, "inject_line")
     graph = builder.compile()
@@ -71,7 +65,6 @@ def run_pipeline(
     input_path: str,
     out_audio_path: str,
     dia_checkpoint: str = config.DIA_CHECKPOINT,
-    openai_model: str = config.OPENAI_MODEL_NAME,
     voice_prompts: Optional[Dict] = None,
     seed: Optional[int] = config.SEED,
 ) -> None:
@@ -111,28 +104,8 @@ def run_pipeline(
         except Exception as e:
             raise RuntimeError(f"Failed to normalize transcript: {str(e)}") from e
 
-        # Build LLM (optional)
-        llm = None
-        try:
-            if os.environ.get("OPENAI_API_KEY"):
-                print("[pipeline] Initializing LLM (via init_chat_model) ...")
-                try:
-                    llm = init_chat_model(openai_model)
-                except Exception as e:
-                    print(
-                        "[pipeline] LLM init failed, falling back to rule-based "
-                        f"injector: {str(e)}"
-                    )
-                    llm = None
-            else:
-                print(
-                    "[pipeline] OPENAI_API_KEY not found: using rule-based injector "
-                    "fallback."
-                )
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize LLM: {str(e)}") from e
-
-        graph = build_langgraph_injector(llm=llm)
+        # The decision is now inside the graph builder
+        graph = build_langgraph_injector()
 
         # Simple summary / topic
         try:

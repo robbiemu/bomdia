@@ -47,3 +47,4 @@ combined.md
 *.mp3
 
 .coverage
+*.task.md

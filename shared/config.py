@@ -35,10 +35,12 @@ class Config:
             "DIA_CHECKPOINT_REVISION",
             file_config.get("model", {}).get("dia_checkpoint_revision", "main"),
         )
-        self.OPENAI_MODEL_NAME = os.environ.get(
-            "OPENAI_MODEL",
-            file_config.get("model", {}).get("openai_model", "openai:gpt-4o-mini"),
+        self.LLM_SPEC = os.environ.get(
+            "LLM_SPEC",
+            file_config.get("model", {}).get("llm_spec", None),
         )
+        # Load model parameters, defaulting to an empty dict
+        self.LLM_PARAMETERS = file_config.get("model", {}).get("parameters", {})
 
         # Pipeline behavior constants
         self.CONTEXT_WINDOW = int(

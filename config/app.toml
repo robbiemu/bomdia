@@ -3,7 +3,13 @@
 [model]
 dia_checkpoint = "nari-labs/Dia-1.6B-0626"
 dia_checkpoint_revision = "main"
-openai_model = "openai:gpt-4o-mini"
+
+# LiteLLM model string (e.g., "openai/gpt-4o-mini", "ollama/llama3", "claude-3-haiku-20240307")
+llm_spec = "openai/gpt-4o-mini"
+
+[model.parameters]
+temperature = 0.5
+max_tokens = 4096
 
 [pipeline]
 context_window = 2

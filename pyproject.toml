@@ -12,16 +12,16 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "langgraph~=0.6.4",
-    "langchain~=0.3.27",
-    "langchain-openai~=0.3.29",
-    "transformers~=4.55.0",
-    "torch~=2.8.0",
-    "soundfile~=0.13.1",
-    "pydub~=0.25.1",
     "datasets~=4.0.0",
+    "nari-tts",
+    "langgraph~=0.6.4",
+    "litellm~=1.75.5", # Add litellm
+    "pydub~=0.25.1",
     "python-dotenv~=1.1.1",
-    "tomli~=2.2.1"
+    "soundfile~=0.13.1",
+    "tomli~=2.2.1",
+    "torch~=2.8.0",
+    "transformers~=4.55.0",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +40,10 @@ dev = [
     "types-toml>=0.10.8.20240310",
 ]
 
+[tool.uv.sources]
+# nari-tts = { git = "https://github.com/nari-labs/dia.git", rev = "main" }
+# for a local clone
+nari-tts = { path = "../dia" }
 
 [project.scripts]
 bomdia = "main:main"
@@ -83,7 +87,7 @@ namespace_packages = true
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-module = ["pydub.*", "dia.*"]
+module = ["pydub.*", "dia.*", "litellm.*"]
 ignore_missing_imports = true
 
 [tool.bandit]

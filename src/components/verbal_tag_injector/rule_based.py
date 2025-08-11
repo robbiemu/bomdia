@@ -2,12 +2,14 @@
 
 import random
 import re
-from typing import Any, Dict
+from typing import Dict
 
 from shared.config import config
 
+from . import VerbalTagInjectorState
 
-def rule_based_injector(state: Dict[str, Any]) -> Dict[str, str]:
+
+def rule_based_injector(state: VerbalTagInjectorState) -> Dict[str, str]:
     """Inject verbal tags using rule-based logic."""
     state.get("prev_lines", [])
     cur = state["current_line"]

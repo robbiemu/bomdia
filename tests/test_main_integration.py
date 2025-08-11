@@ -22,10 +22,10 @@ Speaker 2: Yes, perfect for a walk in the park."""
 
     # Mock the DiaTTS class
     class MockDiaTTS:
-        def __init__(self, model_checkpoint, revision=None):
+        def __init__(self, model_checkpoint, revision=None, seed=None):
             pass
 
-        def text_to_audio_file(self, text, path, max_new_tokens):
+        def text_to_audio_file(self, text, path):
             # Create a dummy wav file with proper WAV format
             import wave
 

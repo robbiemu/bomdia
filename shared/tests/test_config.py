@@ -9,8 +9,8 @@ def test_config_defaults():
     config = Config()
 
     # Test default values
-    assert config.DIA_CHECKPOINT == "nari-labs/Dia-1.6B"
-    assert config.OPENAI_MODEL_NAME == "openai:gpt-4o-mini"
+    assert config.DIA_CHECKPOINT == "nari-labs/Dia-1.6B-0626"
+    assert config.LLM_SPEC == "openai/gpt-4o-mini"
     assert config.CONTEXT_WINDOW == 2
     assert config.PAUSE_PLACEHOLDER == "[insert-verbal-tag-for-pause]"
     assert config.MAX_TAG_RATE == 0.15
@@ -21,6 +21,9 @@ def test_config_defaults():
     assert "(laughs)" in config.VERBAL_TAGS
     assert "…um," in config.LINE_COMBINERS
 
+    # Test LLM parameters
+    assert config.LLM_PARAMETERS == {"temperature": 0.5, "max_tokens": 4096}
+
 
 def test_config_env_override(monkeypatch):
     """Test that environment variables override config values."""
@@ -28,6 +31,7 @@ def test_config_env_override(monkeypatch):
     monkeypatch.setenv("DIA_CHECKPOINT", "test/checkpoint")
     monkeypatch.setenv("CONTEXT_WINDOW", "5")
     monkeypatch.setenv("MAX_TAG_RATE", "0.3")
+    monkeypatch.setenv("LLM_SPEC", "ollama/test-model")
 
     # Create a new config instance
     config = Config()
@@ -36,6 +40,7 @@ def test_config_env_override(monkeypatch):
     assert config.DIA_CHECKPOINT == "test/checkpoint"
     assert config.CONTEXT_WINDOW == 5
     assert config.MAX_TAG_RATE == 0.3
+    assert config.LLM_SPEC == "ollama/test-model"
 
 
 def test_config_toml_override(tmp_path, monkeypatch):
@@ -46,8 +51,12 @@ def test_config_toml_override(tmp_path, monkeypatch):
     test_config_content = """
 [model]
 dia_checkpoint = "test/toml/checkpoint"
-openai_model = "test:model"
+llm_spec = "test:model"
 dia_checkpoint_revision = "test-revision"
+
+[model.parameters]
+temperature = 0.7
+max_tokens = 200
 
 [pipeline]
 context_window = 3
@@ -71,10 +80,11 @@ max_new_tokens_cap = 2000
 
     # Test TOML values
     assert config.DIA_CHECKPOINT == "test/toml/checkpoint"
-    assert config.OPENAI_MODEL_NAME == "test:model"
+    assert config.LLM_SPEC == "test:model"
     assert config.CONTEXT_WINDOW == 3
     assert config.PAUSE_PLACEHOLDER == "[test-placeholder]"
     assert config.MAX_TAG_RATE == 0.25
     assert config.AVG_WPS == 3.0
     assert config.MAX_NEW_TOKENS_CAP == 2000
     assert config.DIA_CHECKPOINT_REVISION == "test-revision"
+    assert config.LLM_PARAMETERS == {"temperature": 0.7, "max_tokens": 200}
