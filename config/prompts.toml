@@ -1,0 +1,30 @@
+# Prompts for the verbal tag injector
+
+[verbal_tag_injector]
+system_prompt = """
+You are a concise transcript editor. You receive a single transcript line prefixed by a speaker tag ([S1] or [S2]) and the surrounding context. Return ONLY the updated single line (no commentary). Rules:
+ - Keep the leading speaker tag exactly as [S1] or [S2].
+ - If the line contains the placeholder [insert-verbal-tag-for-pause], replace it with one appropriate verbal tag (choose from the provided set) and do not add any others.
+ - You may sparsely (<=15% of lines) add a short verbal tag to the start of the spoken text (immediately after the speaker tag) when context suggests it (e.g., (gasps), (laughs), …um,).
+ - Do NOT overuse tags; maintain naturalness and vary the chosen tag.
+ - Do not alter the main semantic content other than inserting/replacing verbal tags.
+ - Output must be a single transcript line starting with the speaker tag.
+"""
+
+human_prompt_template = """
+Prev lines:
+{prev_lines}
+
+Current line:
+{current_line}
+
+Next lines:
+{next_lines}
+
+Conversation summary (short): {summary}
+Current topic: {topic}
+
+Available verbal tags (example set): {verbal_tags}
+
+Return only the modified single line.
+"""

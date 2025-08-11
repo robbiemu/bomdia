@@ -1,0 +1,104 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bomdia"
+version = "0.1.0"
+description = "Add your description here"
+authors = [{name = "Gemini", email = "gemini@google.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "langgraph~=0.6.4",
+    "langchain~=0.3.27",
+    "langchain-openai~=0.3.29",
+    "transformers~=4.55.0",
+    "torch~=2.8.0",
+    "soundfile~=0.13.1",
+    "pydub~=0.25.1",
+    "datasets~=4.0.0",
+    "python-dotenv~=1.1.1",
+    "tomli~=2.2.1"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest~=8.3",
+    "pytest-mock~=3.14",
+    "pytest-cov~=6.2",
+    "pytest-timeout>=2.3.1",
+    "pytest-asyncio>=0.21.0",
+    "black~=25.1.0",
+    "ruff~=0.12.8",
+    "mypy~=1.11",
+    "bandit~=1.7",
+    "pre-commit~=4.3",
+    "pyfakefs>=5.9.2",
+    "types-toml>=0.10.8.20240310",
+]
+
+
+[project.scripts]
+bomdia = "main:main"
+
+#-- Tooling --#
+
+[tool.hatch.build.targets.wheel]
+packages = ["src", "shared"]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+exclude = "prototype.py"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+src = ["src", "shared", "tests"]
+exclude = ["prototype.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "SIM", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["ARG002", "F841", "SIM117", "B018"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+exclude = [
+    "src/components/audio_generator/tests/", 
+    "src/components/transcript_parser/tests/", 
+    "src/components/verbal_tag_injector/tests/", 
+    "shared/tests", 
+    "tests/", 
+    "prototype.py"
+    ]
+namespace_packages = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["pydub.*", "dia.*"]
+ignore_missing_imports = true
+
+[tool.bandit]
+exclude_dirs = ["**/tests"]
+skips = ["B101"]
+
+[tool.pytest.ini_options]
+timeout = 30
+timeout_method = "thread"
+testpaths = ["tests", "src/**/tests", "shared/tests"]
+python_files = ["test_*.py"]
+addopts = "--cov=src --cov=shared --cov-report=term-missing"
+filterwarnings = [
+    "ignore:invalid escape sequence.*:SyntaxWarning:pydub.utils",
+    "ignore:invalid escape sequence.*:SyntaxWarning:pydub.utils",
+    "ignore:invalid escape sequence.*:SyntaxWarning:pydub.utils",
+    "ignore:invalid escape sequence.*:SyntaxWarning:pydub.utils",
+]

@@ -1,0 +1,45 @@
+# Application configuration for bomdia
+
+[model]
+dia_checkpoint = "nari-labs/Dia-1.6B-0626"
+dia_checkpoint_revision = "main"
+openai_model = "openai:gpt-4o-mini"
+
+[pipeline]
+context_window = 2
+pause_placeholder = "[insert-verbal-tag-for-pause]"
+max_tag_rate = 0.15
+avg_wps = 2.5
+max_new_tokens_cap = 1600
+seed = 12345
+
+[tags]
+verbal_tags = [
+    "(laughs)",
+    "(clears throat)",
+    "(sighs)",
+    "(gasps)",
+    "(coughs)",
+    "(singing)",
+    "(sings)",
+    "(mumbles)",
+    "(beep)",
+    "(groans)",
+    "(sniffs)",
+    "(claps)",
+    "(screams)",
+    "(inhales)",
+    "(exhales)",
+    "(applause)",
+    "(burps)",
+    "(humming)",
+    "(sneezes)",
+    "(chuckle)",
+    "(whistles)",
+]
+
+line_combiners = [
+    "…um,",
+    "- uh -",
+    "— hmm —",
+]
