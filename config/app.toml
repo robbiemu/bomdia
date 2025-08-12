@@ -49,3 +49,10 @@ line_combiners = [
     "- uh -",
     "— hmm —",
 ]
+
+[director_agent.rate_control]
+# The target ratio of lines that should receive a new verbal tag (e.g., 0.10 for 10%).
+target_tag_rate = 0.10
+# The maximum number of "burst" tags the agent can inject above its target rate.
+# This allows it to handle emotionally dense scenes.
+tag_burst_allowance = 3

@@ -81,9 +81,7 @@ def run_pipeline(
             processed = lines  # Fallback to un-enhanced lines
         else:
             director = Director(transcript=lines)
-            processed_lines_dict = director.run_rehearsal()
-            # The output needs to be structured like the original 'processed' list
-            processed = processed_lines_dict
+            processed = director.run_rehearsal()
 
         # Chunk into 5-10s mini transcripts
         try:

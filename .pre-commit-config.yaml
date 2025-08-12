@@ -35,4 +35,4 @@ repos:
     hooks:
       - id: bandit
         args: [-c, pyproject.toml, -r]
-        files: ^(src|shared|main\.py)$
+        files: ^(src|shared|tests|main\.py)$

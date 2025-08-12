@@ -1,46 +1,39 @@
 # Verbal Tag Injector Component
 
-This component is responsible for intelligently adding verbal tags (like laughter, sighs, etc.) to a transcript to make it sound more natural when converted to audio.
+## Overview
+
+The Verbal Tag Injector component is responsible for intelligently injecting verbal tags into a transcript. It uses a sophisticated Moment-Based Acting Architecture to enhance the Director/Actor workflow with narrative intelligence and global pacing controls.
 
 ## Architecture
 
-The Verbal Tag Injector uses a two-agent system:
+The core of this component is the Director/Actor model.
 
-### Director Agent
-The Director is the main orchestrator that:
-- Performs an initial analysis of the entire script to generate a global summary
-- Iterates through each line of the transcript
-- For lines requiring nuance, prepares a detailed briefing packet for the Actor
-- Reviews and audits the Actor's suggestions
-- Enforces global rules (like tag quotas)
-- Compiles the final enhanced script
+### Director
 
-### Actor Agent
-The Actor is a specialized agent that:
-- Receives a detailed briefing packet from the Director
-- Performs a "take" on a single line of dialogue
-- Returns a suggested version of the line with appropriate verbal tags
+The Director is responsible for:
+-   **Narrative Moment Discovery**: Identifying narrative moments based on consistent topic, intention, and emotional tone.
+-   **Pivot Line Handling**: Allowing single lines to be part of multiple moments.
+-   **Global Pacing**: Managing a central token bucket to control the rate of tag injection across the entire script.
+-   **Orchestration**: Driving the rehearsal process, defining moments, and delegating to the Actor.
 
-## Workflow
+### Actor
 
-The process follows these steps:
+The Actor is responsible for:
+-   **Creative Performance**: Generating the actual verbal tags for a given moment.
+-   **Moment-at-once Processing**: Processing an entire moment in a single, efficient LLM call.
 
-1. **Pre-Production**: The Director reads the entire transcript and generates a global summary
-2. **Rehearsal Loop**: For each line:
-   - The Director checks if the line needs enhancement
-   - If needed, the Director prepares a briefing packet
-   - The Actor performs a "take" based on the packet
-   - The Director reviews and integrates the suggestion
-3. **Post-Production**: The final enhanced script is produced
+### Workflow
 
-## Configuration
+1.  **Setup**: The Director initializes the transcript, generates a global summary, and sets up the token bucket for pacing.
+2.  **Rehearsal Loop**: The Director iterates through the script, discovering and defining moments.
+3.  **Performance**: When a moment is complete, the Director delegates to the Actor to perform the moment.
+4.  **Review**: The Director reviews the Actor's performance and finalizes the moment.
+5.  **Recomposition**: The edited lines are placed back into the final script.
 
-The component uses prompts defined in `config/prompts.toml`:
-- `global_summary_prompt`: Used by the Director for initial script analysis
-- `unified_moment_analysis_prompt`: Used by the Director for line-by-line analysis
-- `quota_exceeded_note`: Added to Director's notes when tag quota is reached
-- `task_directive_template`: Template for the Actor's task directive
+## Key Features
 
-Pipeline parameters are configured in `config/app.toml`:
-- `max_tag_rate`: Maximum rate of verbal tag insertion
-- `context_window`: Context window size for verbal tag injection
+-   **Deterministic Tag Budgeting**: The number of new tags is calculated based on the script length.
+-   **Robust Error Recovery**: The system can handle errors from the LLM, such as invalid JSON or moment boundaries.
+-   **Performance Optimization**: The number of LLM calls is minimized by processing entire moments at once.
+-   **Narrative Intelligence**: Moments are defined based on the story's logic, not just technical boundaries.
+-   **Prompt Configuration**: All prompts are externally configurable through `config/prompts.toml`, allowing customization of the AI behavior without code changes.

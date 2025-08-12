@@ -1,1 +1,0 @@
-[S1] Hello world.\n[S2] This is a test [insert-verbal-tag-for-pause] with a pause.\n[S1] And another line.\n

@@ -33,12 +33,12 @@ def test_diatts_text_to_audio_file():
 
             # Test text_to_audio_file method
             with patch('builtins.print'):  # Suppress print statements
-                result = tts.text_to_audio_file("Hello world", "/tmp/test.wav")
+                result = tts.text_to_audio_file("Hello world", "/tmp/test.wav")  # nosec B108
 
             # Verify the methods were called
             mock_model.generate.assert_called()
             mock_model.save_audio.assert_called()
-            assert result == "/tmp/test.wav"
+            assert result == "/tmp/test.wav"  # nosec B108
 
 
 def test_diatts_register_voice_prompts():

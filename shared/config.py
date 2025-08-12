@@ -121,6 +121,11 @@ class Config:
         self.director_agent = prompts_config.get("director_agent", {})
         self.actor_agent = prompts_config.get("actor_agent", {})
 
+        # Add rate control settings from app config to director_agent
+        rate_control = file_config.get("director_agent", {}).get("rate_control", {})
+        if rate_control:
+            self.director_agent["rate_control"] = rate_control
+
 
 # Global configuration instance
 config = Config()

@@ -13,42 +13,64 @@ Here is the transcript:
 ---
 """
 
-unified_moment_analysis_prompt = """
-You are an acting coach providing a quick note. Analyze this brief exchange, focusing ONLY on the speaker of the 'Current Line'.
+# Prompt to define narrative moments.
+moment_definition_prompt = """
+You are a script director, preparing your notes for the next performance.
 
-Return a JSON object with two keys:
-- "moment_summary": A third-person analysis of the speaker's emotional state and intention.
-- "directors_note": A first-person, actionable command for the Actor.
+The Previous Moment:
+You just completed a moment described as: "{last_moment_summary}".
+It concluded on line {last_moment_end_line} with the finalized performance: "{last_finalized_line_text}".
 
-**Exchange:**
-{local_context}
+Your Task:
+Now, analyze the upcoming script to define the **next `current moment`**. A `current moment` is a continuous, self-contained beat with a consistent emotional tone and narrative purpose. It starts at the first unassigned line and ends when the topic, intention, or emotional tone clearly shifts.
 
-**Current Line:**
-{current_line}
+Upcoming Script (with global line numbers):
+---
+{forward_script_slice_text}
+---
+
+Your Direction:
+Based on the script, identify the boundaries of the very next moment. Respond with a single JSON object that provides your complete direction.
+
+{{
+  "moment_summary": "Concise description of what is happening in this new moment. What is the core emotion and the characters' primary intentions?",
+  "directors_notes": "Actionable notes for the actors. What should they be feeling or trying to achieve during this moment?",
+  "start_line": {line_number},
+  "end_line": <The line number where this moment naturally concludes>
+}}
+
+Respond with ONLY the JSON object, no other text.
 """
 
 quota_exceeded_note = """
 (Automated message: The production's budget for verbal tags has been met. Do not add any new parenthetical tags.)
 """
 
+
 [actor_agent]
-# Template for the Actor's main task. This will be formatted with context by the Director.
-task_directive_template = """
-You are a voice actor performing a line from a script. Your performance should be natural and enhance the written dialogue.
+# Template for the Actor's moment-based task.
+moment_task_directive_template = """
+You are a voice actor performing lines from a script. Your performance should be natural and enhance the written dialogue.
 
 **Context:**
 - **Global Summary:** {global_summary}
-- **Local Context (The lines immediately surrounding yours):**
-{local_context}
-- **Director's Interpretation of the Moment:** {moment_summary}
-- **Director's Notes:** {directors_notes}
 
 **Your Task:**
-Perform ONLY the following line:
-**Current Line:** {current_line}
+Perform the following lines as a cohesive moment:
+{moment_text}
 
 **Performance Rules:**
 1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally. Replace it with an appropriate verbal hesitation (e.g., "…um,", "— hmm —", "(sighs)"). If no verbalization feels right, you MUST replace it with a single space to connect the parts.
-2.  **Regarding New Verbal Tags:** You may add ONE short verbal tag (e.g., "(laughs)", "(gasps)") to the beginning of the line, but ONLY if it is strongly motivated by the emotional context. Do not add tags arbitrarily.
-3.  **Output:** Return ONLY the single, modified line of dialogue. Do not include the speaker tag (e.g., `[S1]`) or any commentary.
+2.  **Regarding New Verbal Tags:** You may add ONE short verbal tag (e.g., "(laughs)", "(gasps)") to the beginning of a line, but ONLY if it is strongly motivated by the emotional context. Do not add tags arbitrarily.
+3.  **Token Budget:** You have approximately {token_budget:.1f} tokens available for your performance.
+{constraints_text}
+
+**Output Format:**
+Respond with a JSON object that maps each line's local index within the moment to its performed text:
+{{
+  "line_0": "Performed text for the first line in the moment",
+  "line_1": "Performed text for the second line in the moment"
+}}
+
+Make sure to return ONLY the JSON object, with no additional text or markdown formatting.
 """

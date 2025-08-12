@@ -55,22 +55,23 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
                     content = "Topic: Greeting. Relationship: Friendly. Arc: Positive."
                 return MockResponse()
 
-            # Mock response for the unified moment analysis
+            # Mock response for the moment performance
             class MockResponse:
-                content = '{"moment_summary": "Friendly greeting", "directors_note": "Be warm and welcoming"}'
+                content = "[S1] Hello there\n[S2] Hi, how are you?"
             return MockResponse()
 
     monkeypatch.setattr("src.components.verbal_tag_injector.director.LiteLLMInvoker", MockLLMInvoker)
 
-    # Mock the actor's get_actor_suggestion function
-    def mock_get_actor_suggestion(briefing_packet, llm_invoker):
-        # Simple mock that just returns the current line with a verbal tag
-        current_line = briefing_packet["current_line"]
-        if "[insert-verbal-tag-for-pause]" in current_line:
-            return current_line.replace("[insert-verbal-tag-for-pause]", "(um)")
-        return current_line
+    # Mock the actor's perform_moment function
+    def mock_perform_moment(self, moment_id, lines, token_budget, constraints, global_summary):
+        # Simple mock that just returns the lines as they are
+        result = {}
+        for line in lines:
+            line_number = line["global_line_number"]
+            result[line_number] = line
+        return result
 
-    monkeypatch.setattr("src.components.verbal_tag_injector.director.get_actor_suggestion", mock_get_actor_suggestion)
+    monkeypatch.setattr("src.components.verbal_tag_injector.actor.Actor.perform_moment", mock_perform_moment)
 
     # Run the pipeline
     run_pipeline(str(transcript_path), str(output_path))

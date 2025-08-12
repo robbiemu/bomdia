@@ -71,6 +71,20 @@ max_new_tokens_cap = 1600
 seed = 42
 ```
 
+### Director Agent Rate Control
+
+The `[director_agent.rate_control]` section configures the token bucket algorithm for the Director Agent's tagging logic.
+
+```toml
+[director_agent.rate_control]
+# The target ratio of lines that should receive a new verbal tag (e.g., 0.10 for 10%).
+target_tag_rate = 0.10
+
+# The maximum number of "burst" tags the agent can inject above its target rate.
+# This allows it to handle emotionally dense scenes.
+tag_burst_allowance = 3
+```
+
 ### Tags Configuration
 
 The `[tags]` section defines verbal tags and line combiners. These are defined by the tts model and should not be modified (unless you are changing the tts model in the code, in which case you already know what you are doing).
@@ -232,6 +246,74 @@ Return a JSON object with two keys:
 {current_line}
 """
 
+# Prompt for the Director to define narrative moments in the script.
+moment_definition_prompt = """
+You are a script director, preparing your notes for the next performance.
+
+The Previous Moment:
+You just completed a moment described as: "{last_moment_summary}".
+It concluded on line {last_moment_end_line} with the finalized performance: "{last_finalized_line_text}".
+
+Your Task:
+Now, analyze the upcoming script to define the next `current moment`. A `current moment` is a continuous, self-contained beat with a consistent emotional tone and narrative purpose.
+
+A moment is defined by a consistent and unbroken:
+*   Topic: The characters are talking about the same immediate subject.
+*   Intention: A character is trying to achieve a single, specific goal.
+*   Emotional Tone: The underlying feeling is consistent.
+
+A moment ends when one of these characteristics clearly shifts.
+
+Examples:
+1. Single, Simple Moment:
+[S1] So, what did you think of the movie?
+[S2] Honestly, I thought it was a bit slow in the middle.
+[S1] Really? I loved the pacing. It felt deliberate.
+Start Line: 0, End Line: 2
+
+2. Two Distinct Moments:
+# Moment A Starts
+[S1] Okay, so the quarterly report is due Friday.
+[S2] Right. I've already finished the sales figures section.
+[S1] Perfect, I'll handle the marketing summary.
+# Moment A Ends, Moment B Starts
+[S2] Oh, by the way, did you see that email from HR about the new policy?
+[S1] No, what did it say?
+# Moment B Ends
+Moment A: Start Line: 0, End Line: 2
+Moment B: Start Line: 3, End Line: 4
+
+3. The "Pivot Line"
+A single line can be the end of one moment and the start of another. This is the most complex case.
+# Moment A (Party) Starts
+[S1] ...and that's why we're all so happy for you!
+[S2] To the happy couple!
+[EVERYONE] Happy birthday to you!  <-- PIVOT LINE
+# Moment A Ends, Moment B (Sadness) Starts
+[S3] (Hearing the song from a distance) That was her favorite song.
+[S4] I know. Let's get out of here.
+# Moment B Ends
+Moment A: Start Line: 0, End Line: 2
+Moment B: Start Line: 2, End Line: 4
+
+Upcoming Script (with line numbers):
+---
+{forward_script_slice_text}
+---
+
+Your Direction:
+Please respond with a single JSON object that provides your complete direction for this next moment.
+
+{
+  "moment_summary": "Concise description of what is happening in this new moment. What is the core emotion and the characters' primary intentions?",
+  "directors_notes": "Actionable notes for the actors. What should they be feeling or trying to achieve during this moment?",
+  "start_line": {line_number},
+  "end_line": {line_number + 1}
+}
+
+Respond with ONLY the JSON object, no other text.
+"""
+
 # Note added when the tag quota has been exceeded
 quota_exceeded_note = """
 (Automated message: The production's budget for verbal tags has been met. Do not add any new parenthetical tags.)
@@ -240,7 +322,7 @@ quota_exceeded_note = """
 
 ### Actor Agent Prompts
 
-The Actor agent uses this prompt template to perform its interpretation of a line.
+The Actor agent uses these prompt templates to perform its interpretation of lines.
 
 ```toml
 [actor_agent]
@@ -263,6 +345,33 @@ Perform ONLY the following line:
 1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally. Replace it with an appropriate verbal hesitation (e.g., "…um,", "--- hmm ---", "(sighs)"). If no verbalization feels right, you MUST replace it with a single space to connect the parts.
 2.  **Regarding New Verbal Tags:** You may add ONE short verbal tag (e.g., "(laughs)", "(gasps)") to the beginning of the line, but ONLY if it is strongly motivated by the emotional context. Do not add tags arbitrarily.
 3.  **Output:** Return ONLY the single, modified line of dialogue. Do not include the speaker tag (e.g., `[S1]`) or any commentary.
+"""
+
+# Template for the Actor's moment-based task.
+moment_task_directive_template = """
+You are a voice actor performing lines from a script. Your performance should be natural and enhance the written dialogue.
+
+**Context:**
+- **Global Summary:** {global_summary}
+
+**Your Task:**
+Perform the following lines as a cohesive moment:
+{moment_text}
+
+**Performance Rules:**
+1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally. Replace it with an appropriate verbal hesitation (e.g., "…um,", "--- hmm ---", "(sighs)"). If no verbalization feels right, you MUST replace it with a single space to connect the parts.
+2.  **Regarding New Verbal Tags:** You may add ONE short verbal tag (e.g., "(laughs)", "(gasps)") to the beginning of a line, but ONLY if it is strongly motivated by the emotional context. Do not add tags arbitrarily.
+3.  **Token Budget:** You have approximately {token_budget:.1f} tokens available for your performance.
+{constraints_text}
+
+**Output Format:**
+Respond with a JSON object that maps each line's global line number to its performed text:
+{
+  "line_0": "Performed text for line 0",
+  "line_1": "Performed text for line 1"
+}
+
+Make sure to return ONLY the JSON object, with no additional text or markdown formatting.
 """
 ```
 
