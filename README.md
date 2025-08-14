@@ -1,3 +1,4 @@
+![bomdia banner](assets/bomdia.jpg)
 # Bom Dia - Podcast Generator
 
 Bom Dia is a tool that converts text transcripts into podcast-style audio files with verbal tags (like laughter, sighs, etc.) added for a more natural listening experience.
