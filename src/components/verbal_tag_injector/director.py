@@ -162,10 +162,19 @@ class Director:
         forward_script_slice_text = "\n".join(forward_script_slice)
 
         # Create prompt for LLM to define moments using the creative-first approach
+        # Use initial prompt when no previous moment exists, otherwise use the
+        #  standard prompt
+        previous_moment_text = ""
+        if self.last_finalized_moment:
+            previous_moment_text = config.director_agent[
+                "previous_moment_template"
+            ].format(
+                last_moment_summary=last_moment_summary,
+                last_moment_end_line=last_moment_end_line,
+                last_finalized_line_text=last_finalized_line_text,
+            )
         prompt = config.director_agent["moment_definition_prompt"].format(
-            last_moment_summary=last_moment_summary,
-            last_moment_end_line=last_moment_end_line,
-            last_finalized_line_text=last_finalized_line_text,
+            previous_moment_segment=previous_moment_text,
             forward_script_slice_text=forward_script_slice_text,
             line_number=line_number,
         )
@@ -296,25 +305,29 @@ class Director:
 
         # Prepare Actor's Data
         # Gather all line_objs for the moment from the finalized_lines structure
-        actor_script = []
+        actor_script = [
+            self.finalized_lines[line["global_line_number"]] for line in moment["lines"]
+        ]
+
         constraints = {}
 
-        for line in moment["lines"]:
-            line_number = line["global_line_number"]
-            # Get the current finalized version of the line
-            current_line = self.finalized_lines[line_number]
-            actor_script.append(current_line)
+        # Check only the first line for pivot constraints (already edited in
+        #  previous moment)
+        if moment["lines"]:  # Safety check for empty moments
+            first_line = moment["lines"][0]
+            first_line_number = first_line["global_line_number"]
+            current_first_line = self.finalized_lines[first_line_number]
 
             # Check if this is a pivot line (already edited)
-            if current_line != self.original_lines[line_number]:
+            if current_first_line != self.original_lines[first_line_number]:
                 # This line was already edited, so it's locked
-                constraints[line_number] = (
+                constraints[first_line_number] = (
                     "This line is locked and its content cannot be changed "
                     "as it was the end of the previous moment. Perform around it."
                 )
                 logger.debug(
                     f"Forward-cascading constraint applied to pivot line "
-                    f"{line_number} in moment {moment_id}."
+                    f"{first_line_number} in moment {moment_id}."
                 )
 
         # Refill the token bucket based on progress

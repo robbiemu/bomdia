@@ -16,13 +16,10 @@ Here is the transcript:
 # Prompt to define narrative moments.
 moment_definition_prompt = """
 You are a script director, preparing your notes for the next performance.
-
-The Previous Moment:
-You just completed a moment described as: "{last_moment_summary}".
-It concluded on line {last_moment_end_line} with the finalized performance: "{last_finalized_line_text}".
+{previous_moment_segment}
 
 Your Task:
-Now, analyze the upcoming script to define the **next `current moment`**. A `current moment` is a continuous, self-contained beat with a consistent emotional tone and narrative purpose. It starts at the first unassigned line and ends when the topic, intention, or emotional tone clearly shifts.
+Analyze the upcoming script to define the **next `current moment`**. A `current moment` is a continuous, self-contained beat with a consistent emotional tone and narrative purpose. It starts at the first unassigned line and ends when the topic, intention, or emotional tone clearly shifts.
 
 Upcoming Script (with global line numbers):
 ---
@@ -40,6 +37,12 @@ Based on the script, identify the boundaries of the very next moment. Respond wi
 }}
 
 Respond with ONLY the JSON object, no other text.
+"""
+
+previous_moment_template = """
+The Previous Moment:
+You just completed a moment described as: "{last_moment_summary}".
+It concluded on line {last_moment_end_line} with the finalized performance: "{last_finalized_line_text}".
 """
 
 quota_exceeded_note = """
