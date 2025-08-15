@@ -59,10 +59,17 @@ You are a voice actor performing lines from a script. Your performance should be
 Perform the following lines as a cohesive moment:
 {moment_text}
 
+**Available Verbalizations:**
+- **For emotional expression:** You may add tags from the following list: {available_verbal_tags}
+- **For pauses/hesitations:** When replacing `[insert-verbal-tag-for-pause]`, you must use one of the emotional expressions, or one following: {available_line_combiners}
+
+
 **Performance Rules:**
-1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally. Replace it with an appropriate verbal hesitation (e.g., "…um,", "— hmm —", "(sighs)"). If no verbalization feels right, you MUST replace it with a single space to connect the parts.
-2.  **Regarding New Verbal Tags:** You may add ONE short verbal tag (e.g., "(laughs)", "(gasps)") to the beginning of a line, but ONLY if it is strongly motivated by the emotional context. Do not add tags arbitrarily.
-3.  **Token Budget:** You have approximately {token_budget:.1f} tokens available for your performance.
+1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally by replacing it with an appropriate option from the list above. If no verbalization feels right, you MUST replace it with a single space to connect the parts.
+2.  **Regarding New Verbal Tags:**
+    *   You have a budget to add up to **{token_budget:.0f}** new verbal tags for emotional expression across **all the lines** in this moment.
+    *   You may add at most **one** new tag to any single line, and only at the beginning of the line.
+    *   Only use your budget on tags that are strongly motivated by the emotional context. If no new tags feel natural, it is better to add zero.
 {constraints_text}
 
 **Output Format:**

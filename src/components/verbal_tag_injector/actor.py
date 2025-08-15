@@ -94,12 +94,18 @@ class Actor:
         Format the prompt for the LLM based on the task directive template.
         """
 
+        # Prepare the lists of available tags by formatting them from the config
+        verbal_tags_list = ", ".join([f"`{tag}`" for tag in config.VERBAL_TAGS])
+        line_combiners_list = ", ".join([f"`{tag}`" for tag in config.LINE_COMBINERS])
+
         prompt_template = config.actor_agent["moment_task_directive_template"]
         prompt = prompt_template.format(
             moment_text=moment_text,
             global_summary=global_summary,
             token_budget=token_budget,
             constraints_text=constraints_text,
+            available_verbal_tags=verbal_tags_list,
+            available_line_combiners=line_combiners_list,
         )
         return str(prompt)  # Explicitly cast to str to satisfy MyPy
 
