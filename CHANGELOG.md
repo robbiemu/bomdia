@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The actor's prompt was incorrectly indicating an internal maximum of only one change per moment instead of one change per _line_.
 - The director's moment definition prompt was incorrectly asserting there was a previous moment even if there was not one.
 - Optimized `_execute_full_moment()`
+- Improves seed handling for determinstic output.
 
 ## [0.1.2] - 2025-08-12
 

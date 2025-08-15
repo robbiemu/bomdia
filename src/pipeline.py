@@ -12,16 +12,15 @@ from typing import Dict, Optional
 from pydub import AudioSegment
 from shared.config import config
 
-# Import components from src/
-from src.components.audio_generator import (
+from components.audio_generator import (
     DiaTTS,
     chunk_to_5_10s,
 )
-from src.components.transcript_parser import (
+from components.transcript_parser import (
     ingest_transcript,
     merge_consecutive_lines,
 )
-from src.components.verbal_tag_injector.director import Director
+from components.verbal_tag_injector.director import Director
 
 # Initialize logger
 logger = logging.getLogger(__name__)
