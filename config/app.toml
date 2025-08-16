@@ -3,9 +3,20 @@
 [model]
 dia_checkpoint = "nari-labs/Dia-1.6B-0626"
 dia_checkpoint_revision = "main"
+dia_compute_dtype = "float16" # Options: "float16", "float32", "bfloat16"
 
 # LiteLLM model string (e.g., "openai/gpt-4o-mini", "ollama/llama3", "claude-3-haiku-20240307")
 llm_spec = "openai/gpt-4o-mini"
+
+[model.dia_generate_params]
+# Uncomment and set any of the following parameters to override the DiaTTS
+# model's internal defaults. Only the parameters you provide will be used.
+# max_tokens = 3072
+# cfg_scale = 3.0
+# temperature = 1.2
+# top_p = 0.95
+# cfg_filter_top_k = 45
+# use_cfg_filter = false
 
 [model.parameters]
 temperature = 0.5
@@ -61,7 +72,7 @@ tag_burst_allowance = 3
 # Mode for the Director's final review.
 # "procedural": Fast, rule-based tag pruning (default).
 # "llm": Slower, higher-quality LLM-based curation.
-mode = "procedural"
+mode = "llm"
 
 [persistence]
 rehearsal_checkpoint_path = "rehearsal_checkpoints.sqlite"

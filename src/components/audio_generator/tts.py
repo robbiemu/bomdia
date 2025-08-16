@@ -7,6 +7,7 @@ from typing import Dict, Optional
 import numpy as np
 import torch
 from dia.model import Dia
+from shared.config import config
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class DiaTTS:
         seed: Optional[int],
         model_checkpoint: str = "nari-labs/Dia-1.6B-0626",
         device: str | None = None,
+        log_level: int = logging.WARNING,
     ) -> None:
         """
         Initializes the TTS engine using the Dia library's native method.
@@ -39,20 +41,28 @@ class DiaTTS:
         Args:
             model_checkpoint (str): The Hugging Face model identifier.
             device (str, optional): Device to run on ('cuda', 'mps', or 'cpu').
+            log_level (int): Logging level for verbose output.
         """
         if device is None:
             device = _get_default_device().type
         self.device = device
         self.seed = seed  # Save for per-block resets
+        self.log_level = log_level
 
         logger.info(
             f"Loading model {model_checkpoint} via official Dia library on "
             f"device {self.device}..."
         )
 
-        # Use float16 for CUDA for max performance, but force float32 for MPS to
-        #  ensure stability.
-        compute_dtype = torch.float16 if self.device == "cuda" else torch.float32
+        # Use configured compute dtype, with fallback to defaults
+        try:
+            compute_dtype = getattr(torch, config.DIA_COMPUTE_DTYPE)
+        except AttributeError:
+            logger.warning(
+                f"Invalid compute dtype '{config.DIA_COMPUTE_DTYPE}', "
+                "falling back to float32"
+            )
+            compute_dtype = torch.float32
 
         if self.seed is not None:
             logger.info(f"Setting seed to '{self.seed}' for voice selection")
@@ -182,8 +192,11 @@ class DiaTTS:
         generate_kwargs = {
             "text": text_payload,
             "use_torch_compile": False,
-            "verbose": True,
+            "verbose": self.log_level in (logging.INFO, logging.DEBUG),
         }
+
+        # Add configured generation parameters
+        generate_kwargs.update(config.DIA_GENERATE_PARAMS)
 
         # Only add audio_prompt argument if we have audio prompts
         if audio_prompt_paths:

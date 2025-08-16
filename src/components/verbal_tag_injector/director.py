@@ -7,6 +7,7 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 from langchain_core.runnables.config import RunnableConfig
+from langgraph.pregel import Pregel
 from shared.config import config
 from shared.llm_invoker import LiteLLMInvoker
 from shared.logging import get_logger
@@ -519,7 +520,7 @@ class Director:
             check_same_thread=False,
         )
         checkpointer = SqliteSaver(conn)
-        graph = build_rehearsal_graph(self, checkpointer)
+        graph: Pregel = build_rehearsal_graph(self, checkpointer)
         runnable_config: RunnableConfig = {
             "configurable": {"thread_id": thread_id},
             "recursion_limit": max(

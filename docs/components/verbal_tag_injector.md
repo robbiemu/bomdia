@@ -4,6 +4,8 @@
 
 The Verbal Tag Injector component is responsible for intelligently injecting verbal tags into a transcript. It uses a sophisticated Moment-Based Acting Architecture to enhance the Director/Actor workflow with narrative intelligence and global pacing controls.
 
+This component can be bypassed entirely by using the `--no-rehearsals` command-line flag, which skips the agentic workflow and processes clean, pre-formatted transcripts directly.
+
 ## Architecture
 
 The core of this component is the Director/Actor model.

@@ -37,12 +37,19 @@ class Config:
             "DIA_CHECKPOINT_REVISION",
             self._file_config.get("model", {}).get("dia_checkpoint_revision", "main"),
         )
+        self.DIA_COMPUTE_DTYPE = os.environ.get(
+            "DIA_COMPUTE_DTYPE",
+            self._file_config.get("model", {}).get("dia_compute_dtype", "float16"),
+        )
         self.LLM_SPEC = os.environ.get(
             "LLM_SPEC",
             self._file_config.get("model", {}).get("llm_spec", None),
         )
         # Load model parameters, defaulting to an empty dict
         self.LLM_PARAMETERS = self._file_config.get("model", {}).get("parameters", {})
+        self.DIA_GENERATE_PARAMS = self._file_config.get("model", {}).get(
+            "dia_generate_params", {}
+        )
 
         # Pipeline behavior constants
         self.CONTEXT_WINDOW = int(
