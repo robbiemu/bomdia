@@ -70,7 +70,9 @@ avg_wps = 2.5
 # Maximum tokens for Dia generation
 max_new_tokens_cap = 1600
 
-# Random seed for reproducible voice selection
+# Default random seed for reproducible voice selection
+# Note: When using pure TTS mode for speakers in multi-block transcripts,
+# a seed is mandatory and will be auto-generated if not provided
 seed = 42
 ```
 

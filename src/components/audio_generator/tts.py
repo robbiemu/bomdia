@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import re
 from typing import Dict, Optional
 
 import numpy as np
@@ -42,6 +43,7 @@ class DiaTTS:
         if device is None:
             device = _get_default_device().type
         self.device = device
+        self.seed = seed  # Save for per-block resets
 
         logger.info(
             f"Loading model {model_checkpoint} via official Dia library on "
@@ -52,9 +54,9 @@ class DiaTTS:
         #  ensure stability.
         compute_dtype = torch.float16 if self.device == "cuda" else torch.float32
 
-        if seed is not None:
-            logger.info(f"Setting seed to '{seed}' for voice selection")
-            self._set_seed(seed)
+        if self.seed is not None:
+            logger.info(f"Setting seed to '{self.seed}' for voice selection")
+            self._set_seed(self.seed)
 
         # The Dia library handles device placement internally.
         # We pass the device directly during creation.
@@ -63,6 +65,7 @@ class DiaTTS:
             compute_dtype=compute_dtype,
             device=self.device,
         )
+        self._voice_prompt_details: Dict[str, Dict[str, Optional[str]]] = {}
 
         logger.info("Model loaded successfully.")
 
@@ -82,53 +85,97 @@ class DiaTTS:
             if os.getenv("CUBLAS_WORKSPACE_CONFIG") is None:
                 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
-    def register_voice_prompts(self, voice_prompts: Dict[str, str]) -> None:
+    def register_voice_prompts(
+        self, voice_prompts: Dict[str, Dict[str, Optional[str]]]
+    ) -> None:
         """
-        Analyzes audio files to generate and store speaker embeddings.
+        Analyzes audio files to generate and store speaker embeddings and prompt info.
         Args:
-            voice_prompts: A dictionary mapping speaker tags (e.g., 'S1')
-                           to audio file paths.
+            voice_prompts: A dictionary mapping speaker tags (e.g., 'S1') to
+                           a dict containing 'path' and optional 'transcript'.
         """
-        logger.info("Generating speaker embeddings from audio prompts...")
-        try:
-            # The Dia library's `generate_speaker_embedding` method is perfect for this.
-            self._speaker_embeddings = self.model.generate_speaker_embedding(
-                list(voice_prompts.values())
-            )
+        logger.info("Registering voice prompts...")
+        self._voice_prompt_details = {}
 
-            # We need to map them back to the speaker tags
-            prompt_speakers = list(voice_prompts.keys())
-            self._speaker_embeddings = {
-                speaker: embedding
-                for speaker, embedding in zip(
-                    prompt_speakers, self._speaker_embeddings, strict=True
+        # Mode B: Prompts that only have a path need an embedding generated.
+        prompts_to_embed = {
+            speaker: details["path"]
+            for speaker, details in voice_prompts.items()
+            if details and not details.get("transcript")
+        }
+
+        if prompts_to_embed:
+            logger.info(
+                "Generating speaker embeddings for: " f"{list(prompts_to_embed.keys())}"
+            )
+            try:
+                embeddings = self.model.generate_speaker_embedding(
+                    list(prompts_to_embed.values())
                 )
-            }
-            logger.info("Speaker embeddings registered successfully.")
-        except Exception as e:
-            raise RuntimeError(
-                f"Failed to generate speaker embeddings from audio prompts: {str(e)}. "
-                "Please check that the audio files are valid and in a supported format."
-            ) from e
+                # Map embeddings back to speakers
+                for speaker, embedding in zip(
+                    prompts_to_embed.keys(), embeddings, strict=True
+                ):
+                    self._voice_prompt_details[speaker] = {
+                        "path": prompts_to_embed[speaker],
+                        "transcript": None,
+                        "embedding": embedding,
+                    }
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to generate speaker embeddings: {str(e)}"
+                ) from e
+
+        # Mode A: Prompts with transcripts are stored directly.
+        for speaker, details in voice_prompts.items():
+            if details and details.get("transcript"):
+                self._voice_prompt_details[speaker] = {
+                    "path": details["path"],
+                    "transcript": details["transcript"],
+                    "embedding": None,  # No embedding needed for Mode A
+                }
+        logger.info("Voice prompts registered successfully.")
 
     def text_to_audio_file(self, text: str, out_path: str) -> str:
         """
-        Converts text to an audio file using the intended two-step process:
-        1. Generate the audio data in memory.
-        2. Save the audio data to a file.
-
-        Args:
-            text (str): Text to convert to speech.
-            out_path (str): Path to save the output audio file (e.g., 'output.mp3').
-
-        Returns:
-            str: The path to the output audio file.
+        Converts text to an audio file, routing to the correct generation mode.
         """
         logger.info(f"Generating audio for: '{text}...'")
 
-        # The `use_torch_compile` flag is crucial for compatibility, especially
-        #  on non-Linux systems.
-        audio_output = self.model.generate(text, use_torch_compile=False, verbose=True)
+        speakers_in_block = set(re.findall(r"\[(S\d+)\]", text))
+        text_payload = text
+        embeddings_for_gen = {}
+        contains_pure_tts = False
+
+        # Determine generation mode for each speaker in the block
+        for speaker in speakers_in_block:
+            prompt_details = self._voice_prompt_details.get(speaker)
+
+            if prompt_details:
+                if prompt_details.get("transcript"):  # Mode A: High-fidelity
+                    path = prompt_details["path"]
+                    transcript = prompt_details["transcript"]
+                    # Prepend the hi-fi prompt: "[S1|path]transcript[S1]"
+                    text_payload = (
+                        f"[{speaker}|{path}]{transcript}[{speaker}] {text_payload}"
+                    )
+                else:  # Mode B: Voice prompt cloning
+                    embeddings_for_gen[speaker] = prompt_details["embedding"]
+            else:  # Mode C: Pure TTS
+                contains_pure_tts = True
+
+        # Reset seed if any speaker is pure TTS to ensure consistency
+        if contains_pure_tts and self.seed is not None:
+            logger.debug(f"Resetting seed to {self.seed} for pure TTS generation.")
+            self._set_seed(self.seed)
+
+        # Generate audio with the appropriate payload and embeddings
+        audio_output = self.model.generate(
+            text_payload,
+            speaker_embedding=embeddings_for_gen if embeddings_for_gen else None,
+            use_torch_compile=False,
+            verbose=True,
+        )
 
         logger.info(f"Saving audio to {out_path}...")
         self.model.save_audio(out_path, audio_output)
