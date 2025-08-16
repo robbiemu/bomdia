@@ -2,6 +2,8 @@
 
 This workflow uses a two-agent system to intelligently enhance a transcript.
 
+This entire workflow can be bypassed by using the `--no-rehearsals` command-line flag, which skips the agentic process and processes clean, pre-formatted transcripts directly.
+
 **The Agents:**
 
 *   **The Director (Main Agent):** The orchestrator and final decision-maker. It manages the entire script, maintains global state (like the tag rate), and directs the Actor. It is responsible for producing the final, compiled script.

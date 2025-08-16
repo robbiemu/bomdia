@@ -9,6 +9,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    List,
     TypeAlias,
 )
 
@@ -49,6 +50,23 @@ def deserialize_token_bucket(data: Dict[str, Any]) -> "TokenBucket":
 
 NodeFunc: TypeAlias = Callable[[RehearsalStateModel], Dict[str, Any]]
 NodeDecorator: TypeAlias = Callable[[NodeFunc], NodeFunc]
+
+
+def _format_script_for_log(lines: List[Any]) -> str:
+    """Format a list of line objects for clean logging."""
+    formatted_lines = []
+    for line in lines:
+        if isinstance(line, dict) and "speaker" in line and "text" in line:
+            formatted_lines.append(f"[{line['speaker']}] {line['text']}")
+        elif isinstance(line, tuple) and len(line) == 2:
+            # Handle (line_num, text) tuples
+            formatted_lines.append(f"Line {line[0]}: {line[1]}")
+        elif isinstance(line, list) and len(line) == 2:
+            # Handle [line_num, text] lists
+            formatted_lines.append(f"Line {line[0]}: {line[1]}")
+        else:
+            formatted_lines.append(str(line))
+    return "\n".join(formatted_lines)
 
 
 def compute_global_tags_used(state: RehearsalStateModel) -> int:
@@ -132,7 +150,7 @@ def build_rehearsal_graph(
         """Generate global summary and initialize rehearsal."""
         # If global_summary already exists, use it (for test compatibility)
         if state.global_summary:
-            logger.info(f"Using existing global summary: {state.global_summary}")
+            logger.debug(f"Using existing global summary: {state.global_summary}")
             return {}
 
         transcript_text = "\n".join(
@@ -196,9 +214,10 @@ def build_rehearsal_graph(
         # Log the defined moments
         for moment in moments:
             logger.info(
-                f"Director defined Moment {moment['moment_id']} "
-                f"(lines {moment['start_line']}-{moment['end_line']}) "
-                f"because: '{moment.get('description', 'No description')}'"
+                f"Director defined Moment {moment['moment_id']}:\n"
+                f"  Line Range: {moment['start_line']}-{moment['end_line']}\n"
+                f"  Description: {moment.get('description', 'No description')}\n"
+                f"  Director's Notes: {moment.get('directors_notes', 'No notes')}"
             )
 
         return {"moment_cache": updated_cache, "line_to_moment_map": updated_map}
@@ -290,12 +309,10 @@ def build_rehearsal_graph(
 
         # Call Actor to perform the moment
         logger.info(f"--- Processing Moment {primary['moment_id']} ---")
-        logger.info(
-            f"Moment description: {primary.get('description', 'No description')}"
-        )
-        logger.info(
-            f"Moment director's notes: {primary.get('directors_notes', 'No notes')}"
-        )
+
+        # Log the Actor's script
+        actor_script_text = _format_script_for_log(actor_script)
+        logger.info(f"Actor performing with script:\n{actor_script_text}")
 
         actor_result = director.actor.perform_moment(
             moment_id=primary["moment_id"],
@@ -304,6 +321,10 @@ def build_rehearsal_graph(
             constraints=constraints,
             global_summary=state.global_summary,
         )
+
+        # Log the Actor's take
+        actor_take_text = _format_script_for_log(list(actor_result.values()))
+        logger.info(f"Actor's take received:\n{actor_take_text}")
 
         return {
             "actor_take": {
@@ -379,14 +400,6 @@ def build_rehearsal_graph(
                 perf_tags = len(re.findall(r"\(.*?\)", performed_by_line[line_num]))
                 actor_tags_added += max(0, perf_tags - orig_tags)
 
-        budget_remaining = tag_budget_for_review
-        overage = max(0, actor_tags_added - tag_budget_for_review)
-
-        logger.info(
-            f"Moment {moment_id} budget analysis: {actor_tags_added} added, "
-            f"{budget_remaining} remaining, {overage} over budget"
-        )
-
         # Apply procedural final cut
         final_by_line, metrics = procedural_final_cut(
             original_by_line, performed_by_line, tag_budget_for_review
@@ -408,7 +421,8 @@ def build_rehearsal_graph(
 
         is_compliant = (final_tag_count - original_tag_count) <= tag_budget_for_review
 
-        logger.info(
+        # Always log at DEBUG level for complete traceability
+        logger.debug(
             f"Director's Final Cut (Procedural): Removed {metrics['removed']} tags "
             f"from Moment {moment_id} to meet budget"
         )
@@ -416,6 +430,16 @@ def build_rehearsal_graph(
             f"Final moment quality: {final_tag_count} tags, "
             f"budget compliance: {is_compliant}"
         )
+
+        # Conditionally log at INFO level only if changes were made
+        if metrics["removed"] > 0:
+            formatted_lines = []
+            for line_num in sorted(final_by_line.keys()):
+                formatted_lines.append((line_num, final_by_line[line_num]))
+            logger.info(
+                f"Final script after Director's Review (changes made):\n"
+                f"{_format_script_for_log(formatted_lines)}"
+            )
 
         return {
             "reviewed_take": final_by_line,
@@ -528,7 +552,9 @@ def build_rehearsal_graph(
                     reviewed_take[line_num] = state.original_lines[line_num]["text"]
 
             review_duration = time.time() - review_start_time
-            logger.info(
+
+            # Always log at DEBUG level for complete traceability
+            logger.debug(
                 f"Director's Final Cut (LLM): Kept {kept_tags}/{total_actor_tags} "
                 f"Actor tags in Moment {moment_id}"
             )
@@ -536,6 +562,17 @@ def build_rehearsal_graph(
                 f"Review process for Moment {moment_id} completed in "
                 f"{review_duration:.2f}s"
             )
+
+            # Conditionally log at INFO level only if changes were made
+            changes_made = kept_tags != total_actor_tags
+            if changes_made:
+                formatted_lines = []
+                for line_num in sorted(reviewed_take.keys()):
+                    formatted_lines.append((line_num, reviewed_take[line_num]))
+                logger.info(
+                    f"Final script after Director's Review (changes made):\n"
+                    f"{_format_script_for_log(formatted_lines)}"
+                )
 
             return {
                 "reviewed_take": reviewed_take,
@@ -764,7 +801,7 @@ def build_rehearsal_graph(
                 "Router 'should_continue_rehearsal' routing to: END "
                 "(all lines processed)"
             )
-            return END
+            return str(END)  # Convert END to string to satisfy type checker
 
         logger.debug("Router 'should_continue_rehearsal' routing to: define_moment")
         return "define_moment"

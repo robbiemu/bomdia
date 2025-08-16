@@ -160,6 +160,22 @@ if __name__ == "__main__":
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Set a specific logging level.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Execute the entire agentic rehearsal process and print the final "
+            "transcript without generating audio."
+        ),
+    )
+    parser.add_argument(
+        "--no-rehearsals",
+        action="store_true",
+        help=(
+            "Bypass the Director/Actor workflow and send the parsed "
+            "transcript directly to audio generation."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -214,6 +230,8 @@ if __name__ == "__main__":
             args.output_path,
             voice_prompts=voice_prompts,
             seed=args.seed,
+            dry_run=args.dry_run,
+            no_rehearsals=args.no_rehearsals,
         )
     except Exception as e:
         logger.error(f"Pipeline execution failed: {str(e)}")

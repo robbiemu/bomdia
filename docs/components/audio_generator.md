@@ -22,13 +22,14 @@ Key features:
 #### `DiaTTS`
 Main class for text-to-speech conversion using the Dia library.
 
-##### `__init__(seed, model_checkpoint, device)`
+##### `__init__(seed, model_checkpoint, device, log_level)`
 Initializes the TTS engine using the Dia library.
 
 **Parameters:**
 - `seed` (int, optional): Random seed for reproducibility
 - `model_checkpoint` (str): The Hugging Face model identifier
 - `device` (str, optional): Device to run on ('cuda', 'mps', or 'cpu')
+- `log_level` (str, optional): Logging level for the TTS model's verbose output ('DEBUG', 'INFO', 'WARNING', 'ERROR')
 
 ##### `register_voice_prompts(voice_prompts)`
 Analyzes audio files to generate and store speaker embeddings.
@@ -78,8 +79,10 @@ Estimates the time in seconds for a given text based on average words per second
 The component uses several configuration values from `config/app.toml`:
 
 - `DIA_CHECKPOINT`: Model checkpoint for the Dia TTS model
+- `DIA_COMPUTE_DTYPE`: Compute data type for the model (float16, float32, bfloat16)
 - `AVG_WPS`: Average words per second for timing estimation
 - `SEED`: Random seed for reproducible voice selection
+- `DIA_GENERATE_PARAMS`: Dictionary of parameters for the Dia TTS generation (only parameters explicitly set will be passed to the model)
 
 ## Usage Examples
 

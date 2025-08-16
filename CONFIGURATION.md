@@ -35,6 +35,8 @@ The `[model]` section configures the text-to-speech and LLM components.
 # Dia TTS model configuration
 dia_checkpoint = "nari-labs/Dia-1.6B-0626"
 dia_checkpoint_revision = "main"
+# Compute precision for Dia TTS model (options: "float16", "float32", "bfloat16")
+dia_compute_dtype = "float16"
 
 # LiteLLM model specification
 # Format: "provider/model-name" or "provider/model-name@provider"
@@ -47,6 +49,15 @@ max_tokens = 150
 top_p = 0.9
 frequency_penalty = 0.0
 presence_penalty = 0.0
+
+# Dia TTS generation parameters
+[model.dia_generate_params]
+max_tokens = 3072
+cfg_scale = 3.0
+temperature = 1.2
+top_p = 0.95
+cfg_filter_top_k = 45
+use_cfg_filter = false
 ```
 
 ### Pipeline Settings

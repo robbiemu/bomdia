@@ -18,6 +18,8 @@ The logging system uses standard logging levels to provide different levels of d
 -   `--- Processing Moment {moment_id} ---`
 -   `Moment description: {description}`
 -   `Moment director's notes: {directors_notes}`
+-   `Actor's take on moment {moment_id}: {actor_response}`
+-   `Director's final cut of moment {moment_id}: {final_cut}`
 -   `Moment {moment_id} finalized in {duration:.2f}s.`
 -   `--- Rehearsal graph completed successfully...`
 -   `--- Moment-based rehearsal process complete. ---`

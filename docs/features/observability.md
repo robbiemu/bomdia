@@ -14,6 +14,7 @@ The core of the observability feature is a unified logging system that replaces 
 
 - **Configurable Verbosity**: Users can control the amount of output through CLI flags
 - **Structured Output**: All messages follow a consistent format with timestamps and log levels
+- **Enhanced Transparency**: Rich INFO-level logging provides insights into the creative process
 - **Standard Interface**: Uses Python's standard `logging` module for familiarity and compatibility
 
 ### Log Levels
@@ -22,8 +23,13 @@ The application uses four standard log levels:
 
 - **ERROR**: Critical issues that prevent normal operation
 - **WARNING**: Non-critical issues that users should be aware of
-- **INFO**: Standard process flow information for normal operation
+- **INFO**: Standard process flow information for normal operation, including detailed insights into the creative process
 - **DEBUG**: Detailed information for troubleshooting and development
+
+At the INFO level, users can now see:
+- The script being sent to the Actor agent
+- The Actor's creative "take" on each moment
+- The Director's final reviewed script after quality control
 
 ### CLI Controls
 

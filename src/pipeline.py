@@ -34,6 +34,8 @@ def run_pipeline(
     dia_checkpoint: str = config.DIA_CHECKPOINT,
     voice_prompts: Optional[Dict] = None,
     seed: Optional[int] = config.SEED,
+    dry_run: bool = False,
+    no_rehearsals: bool = False,
 ) -> None:
     try:
         # Ingest and parse the transcript
@@ -71,8 +73,43 @@ def run_pipeline(
         except Exception as e:
             raise RuntimeError(f"Failed to normalize transcript: {str(e)}") from e
 
-        # ... after lines are ingested and merged
-        if not config.LLM_SPEC:
+        # No Rehearsals Logic
+        if no_rehearsals:
+            # Validate the lines for no rehearsals mode
+            validation_errors = []
+
+            # Check for pause placeholders (consecutive speaker lines)
+            for line in lines:
+                if config.PAUSE_PLACEHOLDER in line["text"]:
+                    validation_errors.append(
+                        "Transcript contains consecutive speaker lines that "
+                        "require merging. Use the standard pipeline or manually "
+                        "merge consecutive lines."
+                    )
+                    break
+
+            # Check speaker tags strictly match S<number> format
+            import re
+
+            for line in lines:
+                if not re.match(r"^S\d+$", line["speaker"]):
+                    validation_errors.append(
+                        f"Invalid speaker tag '{line['speaker']}'. "
+                        "All speaker tags must strictly match the 'S<number>' "
+                        "format (e.g., S1, S2)."
+                    )
+
+            if validation_errors:
+                raise ValueError(
+                    "Transcript validation failed for --no-rehearsals mode:\n"
+                    + "\n".join(f"  - {error}" for error in validation_errors)
+                )
+
+            processed = lines
+            logger.info(
+                "Skipping rehearsals as requested. Using parsed transcript directly."
+            )
+        elif not config.LLM_SPEC:
             # Handle the case where no LLM is available (e.g., run a simplified
             #  rule-based pass or exit)
             logger.warning(
@@ -82,6 +119,14 @@ def run_pipeline(
         else:
             director = Director(transcript=lines)
             processed = director.run_rehearsal()
+
+        # Dry Run Logic
+        if dry_run:
+            logger.info("--- DRY RUN MODE: Final Transcript ---")
+            for line in processed:
+                print(f"[{line['speaker']}] {line['text']}")
+            logger.info("--- DRY RUN COMPLETE ---")
+            return
 
         # Chunk into 5-10s mini transcripts
         try:
@@ -112,7 +157,12 @@ def run_pipeline(
 
         # TTS each block with Dia
         try:
-            tts = DiaTTS(seed=seed, model_checkpoint=dia_checkpoint)
+            # Get the current logger level for the TTS
+            log_level = logger.getEffectiveLevel()
+
+            tts = DiaTTS(
+                seed=seed, model_checkpoint=dia_checkpoint, log_level=log_level
+            )
             if voice_prompts:
                 tts.register_voice_prompts(voice_prompts)
 

@@ -72,6 +72,11 @@ The application provides two flags for controlling output verbosity:
 - `-v`, `--verbose`: Sets logging level to INFO, showing standard process flow
 - `--verbosity {DEBUG,INFO,WARNING,ERROR}`: Sets a specific logging level
 
+Additional workflow control flags:
+
+- `--dry-run`: Execute the entire agentic rehearsal process and print the final transcript without generating any audio files
+- `--no-rehearsals`: Bypass the Director/Actor workflow and send the parsed transcript directly to audio generation (requires a clean, pre-formatted transcript)
+
 Examples:
 ```bash
 # Show standard process flow
@@ -79,6 +84,12 @@ bomdia -v input_transcript.txt output_podcast.mp3
 
 # Show detailed debugging information
 bomdia --verbosity DEBUG input_transcript.txt output_podcast.mp3
+
+# Execute rehearsal process and print final transcript without generating audio
+bomdia --dry-run input_transcript.txt output_podcast.mp3
+
+# Skip rehearsals and generate audio directly from parsed transcript
+bomdia --no-rehearsals input_transcript.txt output_podcast.mp3
 
 # Show only errors and warnings (default)
 bomdia input_transcript.txt output_podcast.mp3

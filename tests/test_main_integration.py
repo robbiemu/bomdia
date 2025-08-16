@@ -24,7 +24,7 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
 
     # Mock the DiaTTS class
     class MockDiaTTS:
-        def __init__(self, model_checkpoint, revision=None, seed=None):
+        def __init__(self, model_checkpoint, revision=None, seed=None, log_level=None):
             pass
 
         def text_to_audio_file(self, text, path):
@@ -120,7 +120,7 @@ def test_main_pipeline_integration_seeding(tmp_path, monkeypatch):
 
     # Mock the DiaTTS class
     class MockDiaTTS:
-        def __init__(self, model_checkpoint, revision=None, seed=None):
+        def __init__(self, model_checkpoint, revision=None, seed=None, log_level=None):
             self.seed = seed
 
         def text_to_audio_file(self, text, path):
