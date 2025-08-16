@@ -152,12 +152,7 @@ bandit -c pyproject.toml -r src/ shared/ tests/ main.py
 
 ## Components
 
-For detailed information about specific components, see the [components documentation](docs/components/):
-
-- [LiteLLM Integration](docs/components/litellm_integration.md) - Provider-agnostic LLM backend
-- [Audio Generator](src/components/audio_generator/) - Text-to-speech conversion
-- [Transcript Parser](src/components/transcript_parser/) - Transcript parsing and processing
-- [Verbal Tag Injector](docs/components/verbal_tag_injector.md) - Agentic verbal tag injection logic
+For detailed information about specific components, see the [components documentation](docs/components/).
 
 ## Versioning and Changelog
 

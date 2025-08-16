@@ -143,8 +143,11 @@ class DiaTTS:
         logger.info(f"Generating audio for: '{text}...'")
 
         speakers_in_block = set(re.findall(r"\[(S\d+)\]", text))
-        text_payload = text
-        embeddings_for_gen = {}
+
+        # Initialize variables for text payload and audio prompts
+        main_text_payload = text
+        prepended_transcripts = ""
+        audio_prompt_paths = []
         contains_pure_tts = False
 
         # Determine generation mode for each speaker in the block
@@ -152,15 +155,18 @@ class DiaTTS:
             prompt_details = self._voice_prompt_details.get(speaker)
 
             if prompt_details:
-                if prompt_details.get("transcript"):  # Mode A: High-fidelity
-                    path = prompt_details["path"]
-                    transcript = prompt_details["transcript"]
-                    # Prepend the hi-fi prompt: "[S1|path]transcript[S1]"
-                    text_payload = (
-                        f"[{speaker}|{path}]{transcript}[{speaker}] {text_payload}"
+                path = prompt_details.get("path")
+                transcript = prompt_details.get("transcript")
+
+                # Add audio prompt path if available
+                if path and path not in audio_prompt_paths:
+                    audio_prompt_paths.append(path)
+
+                # Prepend transcript for high-fidelity cloning (Mode A)
+                if transcript:
+                    prepended_transcripts = (
+                        f"[{speaker}]{transcript}[{speaker}] {prepended_transcripts}"
                     )
-                else:  # Mode B: Voice prompt cloning
-                    embeddings_for_gen[speaker] = prompt_details["embedding"]
             else:  # Mode C: Pure TTS
                 contains_pure_tts = True
 
@@ -169,13 +175,22 @@ class DiaTTS:
             logger.debug(f"Resetting seed to {self.seed} for pure TTS generation.")
             self._set_seed(self.seed)
 
-        # Generate audio with the appropriate payload and embeddings
-        audio_output = self.model.generate(
-            text_payload,
-            speaker_embedding=embeddings_for_gen if embeddings_for_gen else None,
-            use_torch_compile=False,
-            verbose=True,
-        )
+        # Assemble the final text payload
+        text_payload = prepended_transcripts + main_text_payload
+
+        # Prepare arguments for the generate call conditionally
+        generate_kwargs = {
+            "text": text_payload,
+            "use_torch_compile": False,
+            "verbose": True,
+        }
+
+        # Only add audio_prompt argument if we have audio prompts
+        if audio_prompt_paths:
+            generate_kwargs["audio_prompt"] = audio_prompt_paths
+
+        # Generate audio with the corrected keyword arguments
+        audio_output = self.model.generate(**generate_kwargs)
 
         logger.info(f"Saving audio to {out_path}...")
         self.model.save_audio(out_path, audio_output)
