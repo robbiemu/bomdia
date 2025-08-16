@@ -127,7 +127,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "input_path", help="Path to the input transcript file (srt, txt)."
     )
-    parser.add_argument("output_path", help="Path to save the final MP3 audio file.")
+    parser.add_argument(
+        "output_path",
+        nargs="?",  # This makes the positional argument optional
+        default=None,  # Provide a default value if it's not given
+        help="Path to save the final MP3 audio file. (Not required for --dry-run)",
+    )
     parser.add_argument(
         "--seed", type=int, help="Random seed for reproducible voice selection."
     )
@@ -178,6 +183,10 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    # Add a new validation block right after parsing
+    if not args.dry_run and args.output_path is None:
+        parser.error("output_path is required unless the --dry-run flag is used.")
 
     # Determine logging level
     if args.verbosity != "WARNING":

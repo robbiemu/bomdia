@@ -128,7 +128,7 @@ def parse_srt(path: str) -> List[Dict[str, str]]:
     return parsed
 
 
-def ingest_transcript(path: str) -> List[Dict]:
+def ingest_transcript(path: str) -> List[Dict[str, str]]:
     logger.info(f"Ingesting transcript from: {path}")
     if path.lower().endswith(".srt"):
         return parse_srt(path)

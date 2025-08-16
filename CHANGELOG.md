@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Enhanced INFO-Level Logging**: The rehearsal graph now logs the most critical inputs and outputs of the agentic process at the `INFO` level, making the creative process transparent without requiring `DEBUG` verbosity.
 - **TTS Verbose Mode**: The `verbose` parameter for `Dia.generate()` is now set to `True` when the application's logging level is `INFO` or `DEBUG`.
 
+### Fixed
+- **Observability**: The `Final script after Director's Review (changes made):` log message now correctly appears when the Director's review removes all tags suggested by the Actor, ensuring that all modifications are logged.
+- **CLI Usability**: The `output_path` argument is now optional when the `--dry-run` flag is used, improving the command-line experience.
+
 ## [0.1.5] - 2025-08-16
 
 ### Added

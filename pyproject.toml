@@ -15,6 +15,7 @@ dependencies = [
     "datasets~=4.0.0",
     "nari-tts",
     "langgraph~=0.6.4",
+    "langgraph-checkpoint-sqlite>=2.0.11",
     "litellm~=1.75.5", # Add litellm
     "pydub~=0.25.1",
     "python-dotenv~=1.1.1",
@@ -33,6 +34,7 @@ dev = [
     "pytest-cov~=6.2",
     "pytest-timeout>=2.3.1",
     "pytest-asyncio>=0.21.0",
+    "pytest-socket>=0.6.0",
     "black~=25.1.0",
     "ruff~=0.12.8",
     "mypy~=1.11",
@@ -100,7 +102,7 @@ timeout = 30
 timeout_method = "thread"
 testpaths = ["tests", "src/**/tests", "shared/tests"]
 python_files = ["test_*.py"]
-addopts = "--cov=src --cov=shared --cov-report=term-missing"
+addopts = "--cov=src --cov=shared --cov-report=term-missing --disable-socket"
 filterwarnings = [
     "ignore:invalid escape sequence.*:SyntaxWarning:pydub.utils",
     "ignore:invalid escape sequence.*:SyntaxWarning:pydub.utils",
