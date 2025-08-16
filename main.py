@@ -135,7 +135,17 @@ if __name__ == "__main__":
         "--s1-voice", type=str, help="Path to an audio prompt file for Speaker 1."
     )
     parser.add_argument(
+        "--s1-transcript",
+        type=str,
+        help="Transcript for the S1 voice prompt. Requires --s1-voice.",
+    )
+    parser.add_argument(
         "--s2-voice", type=str, help="Path to an audio prompt file for Speaker 2."
+    )
+    parser.add_argument(
+        "--s2-transcript",
+        type=str,
+        help="Transcript for the S2 voice prompt. Requires --s2-voice.",
     )
     parser.add_argument(
         "-v",
@@ -172,6 +182,14 @@ if __name__ == "__main__":
     if not validate_file_exists(args.input_path, "Input transcript file"):
         exit(1)
 
+    # Validate transcript and voice prompt combinations
+    if args.s1_transcript and not args.s1_voice:
+        logger.error("--s1-transcript requires --s1-voice.")
+        exit(1)
+    if args.s2_transcript and not args.s2_voice:
+        logger.error("--s2-transcript requires --s2-voice.")
+        exit(1)
+
     # Build a dictionary of voice prompts and validate them
     voice_prompts = {}
     if args.s1_voice:
@@ -180,14 +198,14 @@ if __name__ == "__main__":
         if not validate_audio_file(args.s1_voice):
             logger.error("Speaker 1 voice prompt file failed validation.")
             exit(1)
-        voice_prompts["S1"] = args.s1_voice
+        voice_prompts["S1"] = {"path": args.s1_voice, "transcript": args.s1_transcript}
     if args.s2_voice:
         if not validate_file_exists(args.s2_voice, "Speaker 2 voice prompt file"):
             exit(1)
         if not validate_audio_file(args.s2_voice):
             logger.error("Speaker 2 voice prompt file failed validation.")
             exit(1)
-        voice_prompts["S2"] = args.s2_voice
+        voice_prompts["S2"] = {"path": args.s2_voice, "transcript": args.s2_transcript}
 
     # Pass the prompts to the pipeline
     try:

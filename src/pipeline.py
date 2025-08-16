@@ -5,6 +5,7 @@ This file contains the core pipeline for converting a transcript to a podcast.
 
 import logging
 import os
+import secrets
 import shutil
 import tempfile
 from typing import Dict, Optional
@@ -95,6 +96,19 @@ def run_pipeline(
             )
         except Exception as e:
             raise RuntimeError(f"Failed to chunk transcript: {str(e)}") from e
+
+        # Mandatory seeding for multi-block pure TTS
+        all_speakers = {ln["speaker"] for ln in lines}
+        prompted_speakers = set(voice_prompts.keys()) if voice_prompts else set()
+        unprompted_speakers = all_speakers - prompted_speakers
+
+        if unprompted_speakers and len(mini_transcripts) > 1 and seed is None:
+            # Generate a secure random seed if one is required but not provided
+            seed = secrets.randbelow(2**32 - 1)
+            logger.debug(
+                "No seed provided for consistent voice generation; using "
+                f"auto-generated seed: {seed}"
+            )
 
         # TTS each block with Dia
         try:
