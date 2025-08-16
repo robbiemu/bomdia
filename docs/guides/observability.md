@@ -14,13 +14,13 @@ The logging system uses standard logging levels to provide different levels of d
 
 ### INFO Level
 
--   `Starting moment-based rehearsal process for X lines...`
+-   `Starting rehearsal graph execution (thread_id: ...)`
 -   `--- Processing Moment {moment_id} ---`
 -   `Moment description: {description}`
 -   `Moment director's notes: {directors_notes}`
--   `--- Moment {moment_id} finalized ---`
--   `--- Moment-based rehearsal process complete. ---`
 -   `Moment {moment_id} finalized in {duration:.2f}s.`
+-   `--- Rehearsal graph completed successfully...`
+-   `--- Moment-based rehearsal process complete. ---`
 
 ### DEBUG Level
 

@@ -9,6 +9,9 @@ This guide covers all configuration options available in `config/app.toml` and `
     - [Model Settings](#model-settings)
     - [Pipeline Settings](#pipeline-settings)
     - [Tags Configuration](#tags-configuration)
+  - [Persistence and Checkpointing](#persistence-and-checkpointing)
+    - [Checkpointing Behavior](#checkpointing-behavior)
+    - [Resuming from Checkpoints](#resuming-from-checkpoints)
   - [Environment Variables](#environment-variables)
     - [LLM Configuration Override](#llm-configuration-override)
   - [Provider-Specific Examples](#provider-specific-examples)
@@ -108,6 +111,26 @@ line_combiners = [
     "— hmm —",
 ]
 ```
+
+## Persistence and Checkpointing
+
+The `[persistence]` section configures the SQLite database used for checkpointing the agentic workflow state. This allows the system to resume from where it left off in case of interruption.
+
+```toml
+[persistence]
+# Path to the SQLite database file for checkpointing
+rehearsal_checkpoint_path = "rehearsal_checkpoints.sqlite"
+```
+
+### Checkpointing Behavior
+
+When running tests, the system automatically uses an in-memory SQLite database (`:memory:`) to prevent polluting the repository with database files. This behavior is controlled by the `PYTEST_CURRENT_TEST` environment variable.
+
+In production, the system uses the configured file path. If the file doesn't exist, it will be created automatically.
+
+### Resuming from Checkpoints
+
+The agentic workflow automatically detects and resumes from existing checkpoints. Each execution is associated with a unique thread ID, which is used to identify the checkpoint state.
 
 ## Environment Variables
 

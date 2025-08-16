@@ -25,7 +25,7 @@ The Actor is responsible for:
 ### Workflow
 
 1.  **Setup**: The Director initializes the transcript, generates a global summary, and sets up the token bucket for pacing.
-2.  **Rehearsal Loop**: The Director iterates through the script, discovering and defining moments.
+2.  **Graph-Based Rehearsal**: The Director's orchestration logic is managed by a **LangGraph state machine**. This graph iterates through the script's state (`current_line_index`), discovering and defining moments in a persistent and resumable workflow.
 3.  **Performance**: When a moment is complete, the Director delegates to the Actor to perform the moment.
 4.  **Review**: The Director reviews the Actor's performance and finalizes the moment.
 5.  **Recomposition**: The edited lines are placed back into the final script.

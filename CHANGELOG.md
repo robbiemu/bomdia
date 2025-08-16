@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.1.4] - 2025-08-15
+
+### Added
+- **Persistent, Resumable Rehearsals:** Implemented `SqliteSaver` checkpointing for the agentic workflow. The process can now be safely interrupted and will automatically resume from the last completed line, saving time and compute on long transcripts.
+- A comprehensive integration test to verify the "crash-and-resume" functionality of the new persistence layer.
+
+### Changed
+- **Agentic Workflow Engine:** Refactored the core agentic orchestrator from a procedural `for` loop to a formal LangGraph state machine. This significantly improves robustness, modularity, and enables the new stateful, resumable operations.
+- Updated `CONFIGURATION.md` and `README.md` to document the new persistence features and explain the automatic in-memory database behavior during testing.
+
 ## [0.1.3] - 2025-08-14
 
 ### Fixed

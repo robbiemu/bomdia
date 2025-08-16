@@ -576,6 +576,8 @@ class TestSpecialHandlingAndEdgeCases:
         mock_global_summary = MagicMock()
         mock_global_summary.content = "A global summary."
 
+        mock_llm_invoker.invoke.return_value = mock_global_summary
+
         # Create the director
         with patch(
             "src.components.verbal_tag_injector.director.LiteLLMInvoker",
@@ -686,6 +688,7 @@ class TestSpecialHandlingAndEdgeCases:
 class TestCoTerminousMomentHandling:
     """Tests for handling co-terminous moments."""
 
+    @patch("shared.config.config.MAX_TAG_RATE", 1)
     def test_co_terminous_moments_are_processed_once(self, mock_llm_invoker):
         """
         Verify that when two moments end on the same line, the full
@@ -750,23 +753,19 @@ class TestCoTerminousMomentHandling:
                 1: ["moment_0_1", "moment_1_1"],
             }
 
-            # Mock the _execute_full_moment method to track calls
-            with patch.object(
-                director, "_execute_full_moment", wraps=director._execute_full_moment
-            ) as mock_execute:
-                # Run the rehearsal
-                with patch(
-                    "src.components.verbal_tag_injector.actor.Actor.perform_moment",
-                    return_value={
-                        0: {
-                            "speaker": "S1",
-                            "text": "Hello there.",
-                            "global_line_number": 0,
-                        },
-                        1: {"speaker": "S2", "text": "Hi!", "global_line_number": 1},
+            # Mock the actor's perform_moment method to track calls
+            with patch(
+                "src.components.verbal_tag_injector.actor.Actor.perform_moment",
+                return_value={
+                    0: {
+                        "speaker": "S1",
+                        "text": "Hello there.",
+                        "global_line_number": 0,
                     },
-                ):
-                    director.run_rehearsal()
+                    1: {"speaker": "S2", "text": "Hi!", "global_line_number": 1},
+                },
+            ) as mock_actor:
+                director.run_rehearsal()
 
-                    # Verify that _execute_full_moment was called only once
-                    mock_execute.assert_called_once()
+                # Verify that Actor.perform_moment was called only once
+                mock_actor.assert_called_once()

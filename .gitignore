@@ -45,6 +45,7 @@ CRUSH.md
 project_bundle.zip
 combined.md
 *.mp3
+*.sqlite
 
 .coverage
 *.task.md

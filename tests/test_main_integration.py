@@ -51,19 +51,26 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
         def invoke(self, messages):
             # Mock response for the global summary
             if "You are a script analyst" in messages[0]["content"]:
+
                 class MockResponse:
                     content = "Topic: Greeting. Relationship: Friendly. Arc: Positive."
+
                 return MockResponse()
 
             # Mock response for the moment performance
             class MockResponse:
                 content = "[S1] Hello there\n[S2] Hi, how are you?"
+
             return MockResponse()
 
-    monkeypatch.setattr("src.components.verbal_tag_injector.director.LiteLLMInvoker", MockLLMInvoker)
+    monkeypatch.setattr(
+        "src.components.verbal_tag_injector.director.LiteLLMInvoker", MockLLMInvoker
+    )
 
     # Mock the actor's perform_moment function
-    def mock_perform_moment(self, moment_id, lines, token_budget, constraints, global_summary):
+    def mock_perform_moment(
+        self, moment_id, lines, token_budget, constraints, global_summary
+    ):
         # Simple mock that just returns the lines as they are
         result = {}
         for line in lines:
@@ -71,7 +78,10 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
             result[line_number] = line
         return result
 
-    monkeypatch.setattr("src.components.verbal_tag_injector.actor.Actor.perform_moment", mock_perform_moment)
+    monkeypatch.setattr(
+        "src.components.verbal_tag_injector.actor.Actor.perform_moment",
+        mock_perform_moment,
+    )
 
     # Run the pipeline
     run_pipeline(str(transcript_path), str(output_path))

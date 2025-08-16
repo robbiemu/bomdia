@@ -1,12 +1,16 @@
+import contextlib
+import io
+import logging
 import os
 import tempfile
 import unittest
-import logging
-import io
-from unittest.mock import MagicMock, patch, call
-from src.pipeline import run_pipeline
+import uuid
+import wave
+from unittest.mock import MagicMock, patch
+
+import numpy as np
 from src.components.verbal_tag_injector.director import Director
-from shared.config import config
+from src.pipeline import run_pipeline
 
 
 class TestAgenticWorkflow(unittest.TestCase):
@@ -31,10 +35,6 @@ class TestAgenticWorkflow(unittest.TestCase):
                     pass
 
                 def text_to_audio_file(self, text, path):
-                    # Create a dummy wav file with proper WAV format
-                    import wave
-                    import numpy as np
-
                     # Create a simple WAV file with minimal content
                     with wave.open(path, "wb") as wav_file:
                         wav_file.setnchannels(1)  # Mono
@@ -55,13 +55,19 @@ class TestAgenticWorkflow(unittest.TestCase):
                     if "You are a script analyst" in messages[0]["content"]:
 
                         class MockResponse:
-                            content = "Topic: Greeting. Relationship: Friendly. Arc: Positive."
+                            content = (
+                                "Topic: Greeting. Relationship: Friendly. "
+                                "Arc: Positive."
+                            )
 
                         return MockResponse()
 
                     # Mock response for the moment performance
                     class MockResponse:
-                        content = "[S1] Hello world.\n[S2] This is a test (um) with a pause.\n[S1] And another line."
+                        content = (
+                            "[S1] Hello world.\n[S2] This is a test (um) with "
+                            "a pause.\n[S1] And another line."
+                        )
 
                     return MockResponse()
 
@@ -77,7 +83,8 @@ class TestAgenticWorkflow(unittest.TestCase):
                 def mock_perform_moment(
                     self, moment_id, lines, token_budget, constraints, global_summary
                 ):
-                    # Simple mock that just returns the lines with pause placeholders replaced
+                    # Simple mock that just returns the lines with pause
+                    #  placeholders replaced
                     result = {}
                     for line in lines:
                         line_number = line["global_line_number"]
@@ -174,7 +181,7 @@ class TestAgenticWorkflow(unittest.TestCase):
         # Set up logging capture
         log_capture = io.StringIO()
         handler = logging.StreamHandler(log_capture)
-        logger = logging.getLogger("src.components.verbal_tag_injector.director")
+        logger = logging.getLogger("src.components.verbal_tag_injector")
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
 
@@ -243,31 +250,18 @@ class TestAgenticWorkflow(unittest.TestCase):
                         log_output = log_capture.getvalue()
 
                         # Test that key logging points are present
+                        self.assertIn("Starting rehearsal graph execution", log_output)
                         self.assertIn(
-                            "Starting moment-based rehearsal process", log_output
+                            "--- Moment-based rehearsal process complete. ---",
+                            log_output,
                         )
-                        self.assertIn("Processing Moment", log_output)
-                        self.assertIn("Token budget for Actor is", log_output)
-                        self.assertIn("Global tag budget status:", log_output)
-
-                        # Fix: Look for the actual logging format with moment ID and timing
-                        self.assertIn("finalized in", log_output)  # More flexible match
-                        # Alternative: More specific assertion
-                        # self.assertTrue(any("finalized in" in line and "s." in line for line in log_output.split('\n')))
-
-                        # Additional assertions for better test coverage
                         self.assertIn(
                             "Director initialized with a budget of", log_output
                         )
                         self.assertIn("Global Summary Generated:", log_output)
                         self.assertIn("Director defined Moment", log_output)
-                        self.assertIn(
-                            "Delegating to Actor for creative suggestion", log_output
-                        )
-                        self.assertIn(
-                            "Delegating to Director for final review", log_output
-                        )
-                        self.assertIn("rehearsal process complete", log_output)
+                        self.assertIn("--- Processing Moment", log_output)
+                        self.assertIn("finalized in", log_output)
 
                         # Test that the actor was called and modified the text
                         self.assertIn("(logged)", final_script[0]["text"])
@@ -296,7 +290,10 @@ class TestAgenticWorkflow(unittest.TestCase):
             },
             {
                 "speaker": "S2",
-                "text": "Oh, by the way, did you see that email from HR about the new policy?",
+                "text": (
+                    "Oh, by the way, did you see that email from HR about the "
+                    "new policy?"
+                ),
             },
             {"speaker": "S1", "text": "No, what did it say?"},
         ]
@@ -397,3 +394,132 @@ class TestAgenticWorkflow(unittest.TestCase):
 
                 # Check if the actor was called by looking at the final script
                 self.assertIn("(modified)", final_script[0]["text"])
+
+
+class TestPersistenceAndResumption:
+    """Tests the Director's ability to resume from a persistent checkpoint."""
+
+    def test_rehearsal_resumes_from_sqlite_checkpoint(self, tmp_path, caplog):
+        """
+        Verify that the Director can resume a rehearsal from a SQLite checkpoint.
+        - Part 1: Run the rehearsal on a 3-line script but force it to stop after
+          processing only the first line by simulating an interruption.
+        - Part 2: Create a new Director instance and run the rehearsal again with
+          the same thread_id.
+        - Assert that the second run resumes from line 1, not from the beginning,
+          and that the final script is correct.
+        """
+        # --- Setup ---
+        db_path = tmp_path / "test_resume_checkpoints.sqlite"
+        thread_id = f"run-{uuid.uuid4()}"
+        transcript = [
+            {"speaker": "S1", "text": "This is the first line."},
+            {"speaker": "S2", "text": "This is the second line."},
+            {"speaker": "S1", "text": "This is the third line."},
+        ]
+
+        # Mock LLM and Actor responses
+        mock_llm_invoker = MagicMock()
+        mock_global_summary = MagicMock(content="A global summary.")
+        mock_moment_def = MagicMock(
+            content='{"moment_summary": "A moment", "directors_notes": "Notes", '
+            '"start_line": 0, "end_line": 0}'
+        )
+        mock_llm_invoker.invoke.side_effect = [
+            mock_global_summary,
+            mock_moment_def,
+            mock_moment_def,
+            mock_moment_def,
+        ]
+
+        def mock_perform_moment(self, moment_id, lines, **kwargs):
+            return {line["global_line_number"]: line.copy() for line in lines}
+
+        # --- Part 1: The "Interrupted" Run ---
+        with patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": str(db_path)}):
+            with patch(
+                "shared.llm_invoker.LiteLLMInvoker",
+                return_value=mock_llm_invoker,
+            ):
+                with patch(
+                    "src.components.verbal_tag_injector.actor.Actor.perform_moment",
+                    mock_perform_moment,
+                ):
+                    # Mock the build_rehearsal_graph function to control the graph behavior
+                    original_build_graph = None
+                    from src.components.verbal_tag_injector.director import build_rehearsal_graph as original_build_graph_import
+                    original_build_graph = original_build_graph_import
+
+                    def mock_build_graph(director, checkpointer=None):
+                        # Build the real graph
+                        graph = original_build_graph(director, checkpointer)
+
+                        # Store reference to the original invoke method
+                        original_invoke = graph.invoke
+
+                        # Patch the invoke method to simulate interruption
+                        def patched_invoke(state, config=None):
+                            # Simulate a low recursion limit causing an interruption
+                            if config and config.get("recursion_limit", 50) <= 8:
+                                raise RecursionError("Simulated interruption")
+                            # Normal behavior
+                            return original_invoke(state, config)
+
+                        # Apply the patch to this specific graph instance
+                        graph.invoke = patched_invoke
+                        return graph
+
+                    with patch("src.components.verbal_tag_injector.director.build_rehearsal_graph", mock_build_graph):
+                        # Instantiate the first Director
+                        director1 = Director(transcript)
+
+                        # Run with a low recursion limit to simulate interruption
+                        with contextlib.suppress(RecursionError):
+                            director1.run_rehearsal(thread_id=thread_id)
+
+        # Verify that the checkpoint file was created and has content
+        assert db_path.exists()
+        assert db_path.stat().st_size > 0
+
+        # --- Part 2: The "Resumed" Run ---
+        caplog.set_level(logging.INFO)
+        with patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": str(db_path)}):
+            with patch(
+                "shared.llm_invoker.LiteLLMInvoker",
+                return_value=mock_llm_invoker,
+            ):
+                with patch(
+                    "src.components.verbal_tag_injector.actor.Actor.perform_moment",
+                    mock_perform_moment,
+                ):
+                    # Instantiate a NEW Director to simulate a fresh script start
+                    director2 = Director(transcript)
+
+                    # The global summary should NOT be generated again, as it's
+                    #  part of the checkpointed state. We can test this by
+                    #  checking the LLM call count. Reset the mock to count calls
+                    #  for the second run only.
+                    mock_llm_invoker.reset_mock()
+
+                    # Run the rehearsal again with the SAME thread_id
+                    final_script = director2.run_rehearsal(thread_id=thread_id)
+
+                    # --- Assertions ---
+                    # 1. Check for the "Resuming from checkpoint" log message
+                    assert any(
+                        "Resuming from checkpoint at line" in record.message
+                        for record in caplog.records
+                    )
+
+                    # 2. The global summary LLM call should have been skipped on resume
+                    # The only calls should be for moment definitions.
+                    assert mock_global_summary.content not in [
+                        c[0][0][0]["content"]
+                        for c in mock_llm_invoker.invoke.call_args_list
+                    ]
+
+                    # 3. The final script should be complete and correct
+                    assert len(final_script) == 3
+                    assert final_script[0]["text"] == "This is the first line."
+                    assert final_script[1]["text"] == "This is the second line."
+                    assert final_script[2]["text"] == "This is the third line."

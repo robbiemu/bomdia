@@ -88,6 +88,8 @@ Detailed information about the agentic workflow configuration can be found in `c
 pytest
 ```
 
+The tests use in-memory SQLite databases to prevent polluting the repository with database files. When running tests, the `REHEARSAL_CHECKPOINT_PATH` configuration is automatically set to `:memory:` to use in-memory databases.
+
 ### Code Quality
 
 ```bash

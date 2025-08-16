@@ -2,42 +2,21 @@ import json
 import math
 import re
 import time
+import uuid
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
+from langchain_core.runnables.config import RunnableConfig
 from shared.config import config
 from shared.llm_invoker import LiteLLMInvoker
 from shared.logging import get_logger
 from src.components.verbal_tag_injector.actor import Actor
+from src.components.verbal_tag_injector.rehearsal_graph import build_rehearsal_graph
+from src.components.verbal_tag_injector.state import RehearsalStateModel
+from src.components.verbal_tag_injector.token_bucket import TokenBucket
 
 # Initialize logger
 logger = get_logger(__name__)
-
-
-class TokenBucket:
-    """A token bucket for rate limiting tag injection."""
-
-    def __init__(self, rate: float, burst_allowance: float):
-        self.rate = rate  # tokens per line
-        self.burst_allowance = burst_allowance  # maximum tokens
-        self.tokens = burst_allowance  # current tokens
-        self.last_line_index = -1  # last line processed
-
-    def refill(self, current_line_index: int) -> None:
-        """Refill the token bucket based on lines processed."""
-        if self.last_line_index >= 0:
-            lines_processed = current_line_index - self.last_line_index
-            new_tokens = lines_processed * self.rate
-            self.tokens = min(self.burst_allowance, self.tokens + new_tokens)
-        self.last_line_index = current_line_index
-
-    def get_available_tokens(self) -> float:
-        """Get the current number of available tokens."""
-        return self.tokens
-
-    def spend(self, tokens: float) -> None:
-        """Spend tokens from the bucket."""
-        self.tokens = max(0.0, self.tokens - tokens)
 
 
 class Director:
@@ -495,104 +474,143 @@ class Director:
 
         return final_takes
 
-    def run_rehearsal(self) -> List[Dict]:
+    def run_rehearsal(self, thread_id: Optional[str] = None) -> List[Dict]:
         """
-        Main method to execute the moment-based director-actor workflow.
+        Main method to execute the moment-based director-actor workflow using LangGraph.
+
+        Args:
+            thread_id: Optional thread ID for resumable execution.
+                If None, generates one.
+
+        Returns:
+            Final script with global_line_number removed
         """
+        if thread_id is None:
+            thread_id = f"run-{uuid.uuid4()}"
+
+        logger.info(f"Starting rehearsal graph execution (thread_id: {thread_id})")
         logger.info(
-            f"Starting moment-based rehearsal process for "
-            f"{len(self.original_lines)} lines..."
+            f"Processing {len(self.original_lines)} lines with "
+            f"budget of {self.new_tag_budget} new verbal tags."
         )
 
-        # Main Processing Loop - iterate through each line
-        for line_number in range(len(self.original_lines)):
-            self.original_lines[line_number]
+        # Prepare initial state for LangGraph
+        initial_state = RehearsalStateModel(
+            original_lines=self.original_lines,
+            finalized_lines=deepcopy(self.finalized_lines),
+            moment_cache=deepcopy(self.moment_cache),
+            line_to_moment_map=deepcopy(self.line_to_moment_map),
+            global_summary=self.global_summary,  # Use existing summary if available
+            token_bucket=self.token_bucket.to_dict(),  # Serialize for persistence
+            current_line_index=0,
+            actor_take=None,
+            last_finalized_moment_id=None,
+        )
 
-            # STAGE 1: Discover moment if needed.
-            if line_number not in self.line_to_moment_map:
-                # Define moment(s), state is updated
-                moments = self._define_moments_containing(line_number)
+        # Build and invoke the graph
+        import sqlite3
 
-                # Update state for each moment
-                for moment in moments:
-                    moment_id = moment["moment_id"]
+        from langgraph.checkpoint.sqlite import SqliteSaver
 
-                    # Validate moment boundaries
-                    if moment["end_line"] < moment["start_line"]:
-                        logger.warning(
-                            f"Invalid moment boundaries for moment "
-                            f"{moment_id}. Creating fallback single-line moment."
-                        )
-                        moment = self._create_fallback_moment(line_number)
-                        moment_id = moment["moment_id"]
+        # Create SqliteSaver with proper thread handling
+        conn = sqlite3.connect(
+            config.REHEARSAL_CHECKPOINT_PATH,
+            # Allow using connection from different threads
+            check_same_thread=False,
+        )
+        checkpointer = SqliteSaver(conn)
+        graph = build_rehearsal_graph(self, checkpointer)
+        runnable_config: RunnableConfig = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": max(
+                50, len(self.original_lines) * 5
+            ),  # Dynamic limit based on transcript length
+        }
 
-                    # Update state
-                    self.moment_cache[moment_id] = moment
-                    # Map all lines in the moment to the moment_id
-                    for line_num in range(moment["start_line"], moment["end_line"] + 1):
-                        if line_num not in self.line_to_moment_map:
-                            self.line_to_moment_map[line_num] = []
-                        self.line_to_moment_map[line_num].append(moment_id)
-
-                    # Add INFO level logging for successfully defined moments
-                    logger.info(
-                        f"Director defined Moment {moment_id} "
-                        f"(lines {moment['start_line']}-{moment['end_line']}) "
-                        f"because: '{moment.get('description', 'No description')}'"
-                    )
-
-            # STAGE 2: Check if this line completes a moment.
-            moments_ending_here = self._find_moments_ending_at(line_number)
-
-            # Sort moments by their starting line number to ensure
-            # chronological processing
-            # This ensures that moments are always processed in the
-            # order they appear in the script
-            moments_ending_here.sort(key=lambda m: m.get("start_line", -1))
-
-            # Optimize finalization for co-terminous moments
-            if len(moments_ending_here) > 1:
-                logger.debug(
-                    f"Found {len(moments_ending_here)} co-terminous moments "
-                    f"ending at line {line_number}"
-                )
-
-                # Process only the first moment with full workflow
-                first_moment = moments_ending_here[0]
-                if not first_moment.get("is_finalized", False):
-                    logger.debug(
-                        f"Processing first moment {first_moment['moment_id']} with "
-                        "full workflow"
-                    )
-                    self._execute_full_moment(first_moment)
-
-                # Mark other moments as finalized without action
-                for i in range(1, len(moments_ending_here)):
-                    other_moment = moments_ending_here[i]
-                    if not other_moment.get("is_finalized", False):
-                        other_moment_id = other_moment["moment_id"]
-                        logger.debug(
-                            f"Moment {other_moment_id} is co-terminous with an "
-                            "already-processed moment. Marking as finalized without "
-                            "action."
-                        )
-                        other_moment["is_finalized"] = True
-                        self.finalized_moments.add(other_moment_id)
+        # Check if we're resuming from a checkpoint
+        current_line_index = 0
+        try:
+            # Try to get the checkpoint to see if we're resuming
+            # Type check since mypy doesn't know checkpointer is always set
+            if (
+                hasattr(graph, "checkpointer")
+                and graph.checkpointer is not None
+                and hasattr(graph.checkpointer, "get_tuple")
+            ):
+                checkpoint_tuple = graph.checkpointer.get_tuple(runnable_config)
             else:
-                # Normal case: process single moment
-                for moment in moments_ending_here:
-                    if not moment.get("is_finalized", False):
-                        # The moment is complete. Execute the full Actor/Director
-                        #  workflow.
-                        self._execute_full_moment(moment)
+                checkpoint_tuple = None
+            if checkpoint_tuple and checkpoint_tuple.checkpoint:
+                # We're resuming from a checkpoint
+                current_line_index = checkpoint_tuple.checkpoint["channel_values"].get(
+                    "current_line_index", 0
+                )
+                logger.info(
+                    f"Resuming from checkpoint at line {current_line_index} "
+                    f"(thread_id: {thread_id})"
+                )
+            else:
+                # New run
+                logger.debug(f"Starting new run (thread_id: {thread_id})")
+        except Exception:
+            # If we can't get the checkpoint, it's a new run
+            logger.debug(f"Starting new run (thread_id: {thread_id})")
+
+        # Log that we're using persistent checkpointing
+        logger.debug(
+            f"State checkpointed at line {current_line_index} (thread_id: {thread_id})"
+        )
+
+        start_time = time.time()
+        final_state_dict = graph.invoke(initial_state, config=runnable_config)
+        final_state = RehearsalStateModel.model_validate(final_state_dict)
+        total_duration = time.time() - start_time
+
+        # Synchronize Director fields from final state for test compatibility
+        self.finalized_lines = final_state.finalized_lines
+        self.moment_cache = final_state.moment_cache
+        self.line_to_moment_map = final_state.line_to_moment_map
+        self.finalized_moments = {
+            mid
+            for mid, m in self.moment_cache.items()
+            if isinstance(m, dict) and m.get("is_finalized")
+        }
+
+        last_finalized_id = final_state.last_finalized_moment_id
+        if (
+            last_finalized_id
+            and isinstance(last_finalized_id, str)
+            and last_finalized_id in self.moment_cache
+        ):
+            self.last_finalized_moment = self.moment_cache[last_finalized_id]
+        else:
+            self.last_finalized_moment = None
+
+        # Restore token bucket from serialized state
+        if isinstance(final_state.token_bucket, dict):
+            self.token_bucket = TokenBucket.from_dict(final_state.token_bucket)
+        else:
+            self.token_bucket = final_state.token_bucket
+
+        # Update global tag usage from final state
+        from src.components.verbal_tag_injector.rehearsal_graph import (
+            compute_global_tags_used,
+        )
+
+        self.global_tags_used = compute_global_tags_used(final_state)
+
+        # Log completion
+        total_lines = len(self.original_lines)
+        logger.info(
+            f"Rehearsal graph completed successfully in {total_duration:.2f}s "
+            f"({total_lines} lines processed, {self.global_tags_used} tags used)"
+        )
 
         # Return the finalized lines without global_line_number
         final_script = []
         for line in self.finalized_lines:
-            # Remove the global_line_number as it was only for internal processing
             line_copy = line.copy()
-            if "global_line_number" in line_copy:
-                del line_copy["global_line_number"]
+            line_copy.pop("global_line_number", None)
             final_script.append(line_copy)
 
         logger.info("--- Moment-based rehearsal process complete. ---")
