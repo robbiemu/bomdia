@@ -91,15 +91,20 @@ class DiaTTS:
         np.random.seed(seed)
         torch.manual_seed(seed)
         torch.use_deterministic_algorithms(True)
-        if torch.cuda.is_available() and self.device == "cuda":
+        if self.device == "cuda" and torch.cuda.is_available():
             torch.cuda.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
 
             # Ensure deterministic behavior for cuDNN (if used)
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
+
             if os.getenv("CUBLAS_WORKSPACE_CONFIG") is None:
                 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        elif self.device == "mps" and torch.backends.mps.is_available():
+            torch.mps.manual_seed(seed)
+            # Enable deterministic behavior for MPS
+            os.environ["PYTORCH_MPS_DETERMINISTIC"] = "1"
 
     def register_voice_prompts(
         self, voice_prompts: Dict[str, Dict[str, Optional[str]]]
@@ -122,7 +127,7 @@ class DiaTTS:
 
         if prompts_to_embed:
             logger.info(
-                "Generating speaker embeddings for: " f"{list(prompts_to_embed.keys())}"
+                f"Generating speaker embeddings for: {list(prompts_to_embed.keys())}"
             )
             try:
                 embeddings = self.model.generate_speaker_embedding(
