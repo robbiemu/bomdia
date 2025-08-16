@@ -3,7 +3,12 @@
 [model]
 dia_checkpoint = "nari-labs/Dia-1.6B-0626"
 dia_checkpoint_revision = "main"
-dia_compute_dtype = "float16" # Options: "float16", "float32", "bfloat16"
+# Optional: Specify the compute precision "float16", "float32", "bfloat16"
+# Defaults will use automatic detection.
+# dia_compute_dtype = "float32"
+# Optional: Specify the compute device. Options: "auto", "cuda", "mps", "cpu".
+# Defaults to "auto" for automatic detection.
+device = "cpu"
 
 # LiteLLM model string (e.g., "openai/gpt-4o-mini", "ollama/llama3", "claude-3-haiku-20240307")
 llm_spec = "openai/gpt-4o-mini"
@@ -63,7 +68,7 @@ line_combiners = [
 
 [director_agent.rate_control]
 # The target ratio of lines that should receive a new verbal tag (e.g., 0.10 for 10%).
-target_tag_rate = 0.10
+target_tag_rate = 0.16
 # The maximum number of "burst" tags the agent can inject above its target rate.
 # This allows it to handle emotionally dense scenes.
 tag_burst_allowance = 3

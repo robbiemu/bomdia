@@ -7,7 +7,7 @@ from src.components.audio_generator.tts import DiaTTS
 
 def test_diatts_init():
     """Test DiaTTS initialization."""
-    with patch("src.components.audio_generator.tts._get_default_device") as mock_device:
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_dia.from_pretrained.return_value = MagicMock()
@@ -22,7 +22,7 @@ def test_diatts_init():
 
 def test_diatts_text_to_audio_file():
     """Test the text_to_audio_file method."""
-    with patch("src.components.audio_generator.tts._get_default_device") as mock_device:
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
@@ -44,7 +44,7 @@ def test_diatts_text_to_audio_file():
 
 def test_diatts_register_voice_prompts():
     """Test the register_voice_prompts method."""
-    with patch("src.components.audio_generator.tts._get_default_device") as mock_device:
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
@@ -67,7 +67,7 @@ def test_diatts_register_voice_prompts():
 
 def test_diatts_register_voice_prompts_hifi():
     """Test the register_voice_prompts method for high-fidelity cloning."""
-    with patch("src.components.audio_generator.tts._get_default_device") as mock_device:
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
@@ -91,7 +91,7 @@ def test_diatts_text_to_audio_file_hifi():
     # Set logging level to INFO to trigger verbose=True
     logging.getLogger().setLevel(logging.INFO)
 
-    with patch("src.components.audio_generator.tts._get_default_device") as mock_device:
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
@@ -134,7 +134,7 @@ def test_diatts_text_to_audio_file_mixed_modes():
     # Set logging level to INFO to trigger verbose=True
     logging.getLogger().setLevel(logging.INFO)
 
-    with patch("src.components.audio_generator.tts._get_default_device") as mock_device:
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
@@ -174,7 +174,7 @@ def test_diatts_text_to_audio_file_mixed_modes():
 
 def test_diatts_text_to_audio_file_pure_tts():
     """Test the text_to_audio_file method for pure TTS."""
-    with patch("src.components.audio_generator.tts._get_default_device") as mock_device:
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
@@ -193,7 +193,7 @@ def test_diatts_text_to_audio_file_pure_tts():
 
 def test_diatts_set_seed():
     """Test the _set_seed method."""
-    with patch("src.components.audio_generator.tts._get_default_device") as mock_device:
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_dia.from_pretrained.return_value = MagicMock()
