@@ -432,7 +432,8 @@ def build_rehearsal_graph(
         )
 
         # Conditionally log at INFO level only if changes were made
-        if metrics["removed"] > 0:
+        changes_made = final_by_line != performed_by_line
+        if changes_made:
             formatted_lines = []
             for line_num in sorted(final_by_line.keys()):
                 formatted_lines.append((line_num, final_by_line[line_num]))
@@ -564,7 +565,18 @@ def build_rehearsal_graph(
             )
 
             # Conditionally log at INFO level only if changes were made
-            changes_made = kept_tags != total_actor_tags
+            actor_take_text_by_line = {}
+            for line_num in range(start_line, end_line + 1):
+                if line_num in actor_take["result"]:
+                    actor_take_text_by_line[line_num] = actor_take["result"][line_num][
+                        "text"
+                    ]
+                elif 0 <= line_num < len(state.original_lines):
+                    actor_take_text_by_line[line_num] = state.original_lines[line_num][
+                        "text"
+                    ]
+
+            changes_made = reviewed_take != actor_take_text_by_line
             if changes_made:
                 formatted_lines = []
                 for line_num in sorted(reviewed_take.keys()):

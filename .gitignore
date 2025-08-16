@@ -46,6 +46,7 @@ project_bundle.zip
 combined.md
 *.mp3
 *.sqlite
+*.sqlite-*
 
 .coverage
 *.task.md

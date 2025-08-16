@@ -9,9 +9,9 @@ from shared.logging import get_logger
 logger = get_logger(__name__)
 
 
-def merge_consecutive_lines(lines: List[Dict]) -> List[Dict]:
+def merge_consecutive_lines(lines: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """Merge consecutive lines from the same speaker with a pause placeholder."""
-    out: List[Dict] = []
+    out: List[Dict[str, str]] = []
     warnings = []
     for ln in lines:
         if out and ln["speaker"] == out[-1]["speaker"]:

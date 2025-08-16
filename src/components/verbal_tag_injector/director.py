@@ -168,10 +168,27 @@ class Director:
                 # Clean up the response content by removing markdown code blocks
                 # . and other text
                 cleaned_response = response.content.strip()
+                # Remove markdown code block markers if present
+                if cleaned_response.startswith("```json"):
+                    cleaned_response = cleaned_response[7:]
+                if cleaned_response.startswith("```"):
+                    cleaned_response = cleaned_response[3:]
+                if cleaned_response.endswith("```"):
+                    cleaned_response = cleaned_response[:-3]
                 # Find the JSON object using a regular expression
-                match = re.search(r"\{.*\}", cleaned_response, re.DOTALL)
+                # This pattern is more flexible with whitespace and nesting
+                match = re.search(
+                    r"\{[^{]*?\{.*?\}[^}]*?\}", cleaned_response, re.DOTALL
+                )
+                if not match:
+                    # Fallback to simpler pattern if the complex one doesn't match
+                    match = re.search(r"\{.*\}", cleaned_response, re.DOTALL)
                 if match:
                     json_text = match.group(0)
+                    # Clean up the JSON text to ensure it's valid
+                    json_text = json_text.strip()
+                    # Remove any trailing commas before closing braces/brackets
+                    json_text = re.sub(r",(\s*[}\]])", r"\1", json_text)
                     moment_direction = json.loads(json_text)
                 else:
                     # Fallback if no JSON object is found
@@ -392,7 +409,9 @@ class Director:
         logger.info(f"--- Moment {moment_id} finalized ---")
 
     def _calculate_tags_spent(
-        self, original_lines: List[Dict], final_lines: Dict
+        self,
+        original_lines: List[Dict],
+        final_lines: Dict,
     ) -> float:
         """
         Calculate how many tags were actually added/spent in this moment.
@@ -563,7 +582,9 @@ class Director:
         )
 
         start_time = time.time()
-        final_state_dict = graph.invoke(initial_state, config=runnable_config)
+        final_state_dict = graph.invoke(
+            initial_state.model_dump(), config=runnable_config
+        )
         final_state = RehearsalStateModel.model_validate(final_state_dict)
         total_duration = time.time() - start_time
 

@@ -56,8 +56,14 @@ class DiaTTS:
 
         # Use configured compute dtype, with fallback to defaults
         try:
-            compute_dtype = getattr(torch, config.DIA_COMPUTE_DTYPE)
-        except AttributeError:
+            # Ensure DIA_COMPUTE_DTYPE is a string before using getattr
+            dtype_name = (
+                config.DIA_COMPUTE_DTYPE
+                if isinstance(config.DIA_COMPUTE_DTYPE, str)
+                else "float32"
+            )
+            compute_dtype = getattr(torch, dtype_name)
+        except (AttributeError, TypeError):
             logger.warning(
                 f"Invalid compute dtype '{config.DIA_COMPUTE_DTYPE}', "
                 "falling back to float32"
