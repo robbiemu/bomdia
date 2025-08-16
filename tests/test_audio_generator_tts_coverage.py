@@ -102,8 +102,8 @@ def test_diatts_text_to_audio_file_hifi():
 
             # Verify the methods were called
             mock_model.generate.assert_called_with(
-                '[S1|path1]transcript1[S1] [S1] Hello world',
-                speaker_embedding=None,
+                text='[S1]transcript1[S1] [S1] Hello world',
+                audio_prompt=['path1'],
                 use_torch_compile=False,
                 verbose=True,
             )
@@ -126,12 +126,19 @@ def test_diatts_text_to_audio_file_mixed_modes():
                 tts.text_to_audio_file("[S1] Hello [S2] world", "/tmp/test.wav")  # nosec B108
 
             # Verify the methods were called
-            mock_model.generate.assert_called_with(
-                '[S1|path1]transcript1[S1] [S1] Hello [S2] world',
-                speaker_embedding={'S2': 'embedding2'},
-                use_torch_compile=False,
-                verbose=True,
-            )
+            # Use `assert_called_once` to get the call arguments
+            mock_model.generate.assert_called_once()
+            call_args, call_kwargs = mock_model.generate.call_args
+
+            # Assert the text argument
+            assert call_kwargs['text'] == '[S1]transcript1[S1] [S1] Hello [S2] world'
+
+            # Assert audio_prompt paths are present (order may vary)
+            assert set(call_kwargs['audio_prompt']) == set(['path1', 'path2'])
+
+            # Assert other arguments
+            assert call_kwargs['use_torch_compile'] == False
+            assert call_kwargs['verbose'] == True
 
 def test_diatts_text_to_audio_file_pure_tts():
     """Test the text_to_audio_file method for pure TTS."""
