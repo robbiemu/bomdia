@@ -37,6 +37,9 @@ dia_checkpoint = "nari-labs/Dia-1.6B-0626"
 dia_checkpoint_revision = "main"
 # Compute precision for Dia TTS model (options: "float16", "float32", "bfloat16")
 dia_compute_dtype = "float16"
+# Optional: Specify the compute device. Options: "auto", "cuda", "mps", "cpu".
+# Defaults to "auto" for automatic detection.
+# device = "auto"
 
 # LiteLLM model specification
 # Format: "provider/model-name" or "provider/model-name@provider"
@@ -58,6 +61,23 @@ temperature = 1.2
 top_p = 0.95
 cfg_filter_top_k = 45
 use_cfg_filter = false
+
+### Device Selection
+
+You can explicitly set the compute device for the TTS model.
+
+```toml
+[model]
+# Options: "auto", "cuda", "mps", "cpu"
+device = "cpu"
+```
+
+The default is `"auto"`, which will prioritize `cuda`, then `mps`, then `cpu`.
+
+You can also override this setting with the `BOMDIA_DEVICE` environment variable:
+
+```bash
+export BOMDIA_DEVICE="cpu"
 ```
 
 ### Pipeline Settings

@@ -41,6 +41,11 @@ class Config:
             "DIA_COMPUTE_DTYPE",
             self._file_config.get("model", {}).get("dia_compute_dtype", "float16"),
         )
+        # Device selection for PyTorch
+        self.DIA_DEVICE = os.environ.get(
+            "BOMDIA_DEVICE",
+            self._file_config.get("model", {}).get("device", "auto"),
+        ).lower()
         self.LLM_SPEC = os.environ.get(
             "LLM_SPEC",
             self._file_config.get("model", {}).get("llm_spec", None),

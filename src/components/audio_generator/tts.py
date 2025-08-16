@@ -13,11 +13,43 @@ from shared.config import config
 logger = logging.getLogger(__name__)
 
 
-def _get_default_device() -> torch.device:
+def _get_device() -> torch.device:
+    """
+    Selects the appropriate torch device based on configuration and availability.
+    Priority: Config Override > CUDA > MPS > CPU.
+    """
+    preferred_device = config.DIA_DEVICE
+
+    if preferred_device != "auto":
+        # User has specified a device
+        if preferred_device == "cuda" and not torch.cuda.is_available():
+            logger.warning(
+                "CUDA device specified but not available. Falling back to "
+                "auto-detection."
+            )
+        elif preferred_device == "mps" and not torch.backends.mps.is_available():
+            logger.warning(
+                "MPS device specified but not available. Falling back to "
+                "auto-detection."
+            )
+        elif preferred_device in ["cuda", "mps", "cpu"]:
+            logger.debug(f"Using specified device: {preferred_device}")
+            return torch.device(preferred_device)
+        else:
+            logger.warning(
+                f"Invalid device '{preferred_device}' specified. Falling back to "
+                "auto-detection."
+            )
+
+    # Auto-detection logic
     if torch.cuda.is_available():
+        logger.debug("Auto-detected and using device: cuda")
         return torch.device("cuda")
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        logger.debug("Auto-detected and using device: mps")
         return torch.device("mps")
+
+    logger.debug("Auto-detected and using device: cpu")
     return torch.device("cpu")
 
 
@@ -41,11 +73,11 @@ class DiaTTS:
         Args:
             model_checkpoint (str): The Hugging Face model identifier.
             device (str, optional): Device to run on ('cuda', 'mps', or 'cpu').
+                                    If provided, overrides config settings.
             log_level (int): Logging level for verbose output.
         """
-        if device is None:
-            device = _get_default_device().type
-        self.device = device
+        # The device is now determined by the central helper function
+        self.device = device if device is not None else _get_device().type
         self.seed = seed  # Save for per-block resets
         self.log_level = log_level
 

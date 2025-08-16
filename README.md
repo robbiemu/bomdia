@@ -132,6 +132,7 @@ Other configuration options can be found in `config/app.toml`, including:
 - Model checkpoints for the TTS system
 - Pipeline behavior parameters
 - Verbal tags and line combiners
+- Device selection for TTS model (advanced users)
 
 Detailed information about the agentic workflow configuration can be found in `config/prompts.toml`.
 

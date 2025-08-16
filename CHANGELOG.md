@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No Rehearsals Mode**: A new `--no-rehearsals` flag provides a "fast path" that bypasses the entire Director/Actor workflow, sending the parsed transcript directly to the audio generation stage.
 - **Configurable TTS Precision**: Added `dia_compute_dtype` setting in `config/app.toml` allowing users to specify the `torch.dtype` (e.g., "float16", "float32", "bfloat16") for the DiaTTS model.
 - **Configurable TTS Generation Parameters**: Exposed key parameters of the `Dia.generate()` method in `config/app.toml` including `max_tokens`, `cfg_scale`, `temperature`, `top_p`, `cfg_filter_top_k`, and `use_cfg_filter`.
+- **Configurable Device Selection**: Added `device` setting in `config/app.toml` allowing users to explicitly specify the compute device (`cuda`, `mps`, or `cpu`) for TTS model inference. Users can also override this with the `BOMDIA_DEVICE` environment variable. If neither is set, the application auto-detects the best available device in the priority order: `cuda` > `mps` > `cpu`.
 
 ### Changed
 - **Enhanced INFO-Level Logging**: The rehearsal graph now logs the most critical inputs and outputs of the agentic process at the `INFO` level, making the creative process transparent without requiring `DEBUG` verbosity.
