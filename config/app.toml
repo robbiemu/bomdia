@@ -57,5 +57,11 @@ target_tag_rate = 0.10
 # This allows it to handle emotionally dense scenes.
 tag_burst_allowance = 3
 
+[director_agent.review]
+# Mode for the Director's final review.
+# "procedural": Fast, rule-based tag pruning (default).
+# "llm": Slower, higher-quality LLM-based curation.
+mode = "procedural"
+
 [persistence]
 rehearsal_checkpoint_path = "rehearsal_checkpoints.sqlite"

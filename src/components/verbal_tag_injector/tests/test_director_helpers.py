@@ -34,6 +34,7 @@ class MockConfig:
                 "Analyze: {local_context}, {current_line}"
             ),
             "rate_control": {"target_tag_rate": 0.10, "tag_burst_allowance": 3},
+            "review": {"mode": "procedural"},
         }
 
         # Create actor_agent as a dict

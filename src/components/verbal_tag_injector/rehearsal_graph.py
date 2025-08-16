@@ -1,3 +1,4 @@
+import json
 import math
 import re
 import time
@@ -18,6 +19,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.pregel import Pregel
 from shared.config import config
 from shared.logging import get_logger
+from src.components.verbal_tag_injector.procedural_review import procedural_final_cut
 from src.components.verbal_tag_injector.state import RehearsalStateModel
 from src.components.verbal_tag_injector.token_bucket import TokenBucket
 
@@ -137,7 +139,7 @@ def build_rehearsal_graph(
             [f"[{line['speaker']}] {line['text']}" for line in state.original_lines]
         )
 
-        prompt = config.director_agent["global_summary_prompt"].format(
+        prompt = DIRECTOR_AGENT_CONFIG["global_summary_prompt"].format(
             transcript_text=transcript_text
         )
 
@@ -312,10 +314,296 @@ def build_rehearsal_graph(
             }
         }
 
-    @log_node("pass_through_review")
-    def pass_through_review(state: RehearsalStateModel) -> Dict[str, Any]:
-        """Placeholder for Director's Final Cut step."""
-        return {}
+    def compute_tag_budget_for_review(state: RehearsalStateModel) -> int:
+        """Compute strict per-moment tag budget for Director's review."""
+        # Calculate global budget constraints
+        from shared.config import config as shared_config
+
+        global_budget_total = math.floor(
+            len(state.original_lines) * shared_config.MAX_TAG_RATE
+        )
+        global_used_so_far = compute_global_tags_used(state)
+        remaining_global_budget = max(0, global_budget_total - global_used_so_far)
+
+        # Get moment bucket availability
+        token_bucket = (
+            deserialize_token_bucket(state.token_bucket)
+            if isinstance(state.token_bucket, dict)
+            else state.token_bucket
+        )
+        line_index = state.current_line_index
+        token_bucket.refill(line_index)
+        moment_bucket_available = token_bucket.get_available_tokens()
+
+        # Apply constraints
+        max_tags_per_moment = shared_config.director_agent["rate_control"][
+            "tag_burst_allowance"
+        ]
+        tag_budget_for_review = min(
+            remaining_global_budget, moment_bucket_available, max_tags_per_moment
+        )
+
+        return int(tag_budget_for_review)
+
+    @log_node("procedural_review")
+    def procedural_review_node(state: RehearsalStateModel) -> Dict[str, Any]:
+        """Apply procedural review to the Actor's performance."""
+        actor_take = state.actor_take
+        if not actor_take or actor_take.get("skip_due_to_budget"):
+            return {"reviewed_take": None, "review_mode_used": "procedural"}
+
+        moment_id = actor_take["moment_id"]
+        start_line = actor_take["start_line"]
+        end_line = actor_take["end_line"]
+
+        # Build dictionaries for procedural review
+        original_by_line = {}
+        performed_by_line = {}
+
+        for line_num in range(start_line, end_line + 1):
+            if 0 <= line_num < len(state.original_lines):
+                original_by_line[line_num] = state.original_lines[line_num]["text"]
+                if line_num in actor_take["result"]:
+                    performed_by_line[line_num] = actor_take["result"][line_num]["text"]
+                else:
+                    performed_by_line[line_num] = state.original_lines[line_num]["text"]
+
+        # Compute tag budget
+        tag_budget_for_review = compute_tag_budget_for_review(state)
+
+        # Count actor's added tags for logging
+        actor_tags_added = 0
+        for line_num in range(start_line, end_line + 1):
+            if line_num in original_by_line and line_num in performed_by_line:
+                orig_tags = len(re.findall(r"\(.*?\)", original_by_line[line_num]))
+                perf_tags = len(re.findall(r"\(.*?\)", performed_by_line[line_num]))
+                actor_tags_added += max(0, perf_tags - orig_tags)
+
+        budget_remaining = tag_budget_for_review
+        overage = max(0, actor_tags_added - tag_budget_for_review)
+
+        logger.info(
+            f"Moment {moment_id} budget analysis: {actor_tags_added} added, "
+            f"{budget_remaining} remaining, {overage} over budget"
+        )
+
+        # Apply procedural final cut
+        final_by_line, metrics = procedural_final_cut(
+            original_by_line, performed_by_line, tag_budget_for_review
+        )
+
+        # Count final tags for compliance check
+        final_tag_count = 0
+        for line_num in range(start_line, end_line + 1):
+            if line_num in final_by_line:
+                final_tag_count += len(re.findall(r"\(.*?\)", final_by_line[line_num]))
+
+        # Count original tags for compliance comparison
+        original_tag_count = 0
+        for line_num in range(start_line, end_line + 1):
+            if line_num in original_by_line:
+                original_tag_count += len(
+                    re.findall(r"\(.*?\)", original_by_line[line_num])
+                )
+
+        is_compliant = (final_tag_count - original_tag_count) <= tag_budget_for_review
+
+        logger.info(
+            f"Director's Final Cut (Procedural): Removed {metrics['removed']} tags "
+            f"from Moment {moment_id} to meet budget"
+        )
+        logger.debug(
+            f"Final moment quality: {final_tag_count} tags, "
+            f"budget compliance: {is_compliant}"
+        )
+
+        return {
+            "reviewed_take": final_by_line,
+            "review_mode_used": "procedural",
+            "review_metrics": metrics,
+        }
+
+    @log_node("llm_review")
+    def llm_review_node(state: RehearsalStateModel) -> Dict[str, Any]:
+        """Apply LLM-based review to the Actor's performance."""
+        review_start_time = time.time()
+        actor_take = state.actor_take
+
+        if not actor_take or actor_take.get("skip_due_to_budget"):
+            return {
+                "reviewed_take": None,
+                "review_mode_used": "llm",
+                "llm_review_failed": False,
+            }
+
+        moment_id = actor_take["moment_id"]
+        start_line = actor_take["start_line"]
+        end_line = actor_take["end_line"]
+
+        try:
+            # Build context for LLM prompt
+            tag_budget_for_review = compute_tag_budget_for_review(state)
+
+            # Original script text for this moment
+            original_script_lines = []
+            for line_num in range(start_line, end_line + 1):
+                if 0 <= line_num < len(state.original_lines):
+                    line = state.original_lines[line_num]
+                    original_script_lines.append(f"[{line['speaker']}] {line['text']}")
+            original_script_text = "\n".join(original_script_lines)
+
+            # Actor's performance text for this moment
+            actor_performance_lines = []
+            for line_num in range(start_line, end_line + 1):
+                if line_num in actor_take["result"]:
+                    line = actor_take["result"][line_num]
+                    actor_performance_lines.append(
+                        f"[{line['speaker']}] {line['text']}"
+                    )
+                elif 0 <= line_num < len(state.original_lines):
+                    line = state.original_lines[line_num]
+                    actor_performance_lines.append(
+                        f"[{line['speaker']}] {line['text']}"
+                    )
+            actor_performance_text = "\n".join(actor_performance_lines)
+
+            # Previous moment context (simplified for now)
+            last_moment_summary = "No previous moment"
+            previous_moment_performance_text = "None"
+            if state.last_finalized_moment_id:
+                last_moment_summary = f"Moment {state.last_finalized_moment_id}"
+                previous_moment_performance_text = (
+                    "[Previous moment content not available in this context]"
+                )
+
+            # Format the director review prompt
+            prompt = DIRECTOR_AGENT_CONFIG["director_review_prompt"].format(
+                global_summary=state.global_summary,
+                last_moment_summary=last_moment_summary,
+                previous_moment_performance_text=previous_moment_performance_text,
+                original_script_text=original_script_text,
+                actor_performance_text=actor_performance_text,
+                tag_budget=tag_budget_for_review,
+                start_line=start_line,
+                start_line_plus_1=start_line + 1,
+            )
+
+            # Invoke LLM
+            messages = [{"role": "user", "content": prompt}]
+            response = director.llm_invoker.invoke(messages)
+
+            # Parse JSON response
+            cleaned_response = response.content.strip()
+            match = re.search(r"\{.*\}", cleaned_response, re.DOTALL)
+            if not match:
+                raise ValueError("No JSON object found in LLM response")
+
+            json_text = match.group(0)
+            llm_decision = json.loads(json_text)
+
+            # Validate and build reviewed_take
+            reviewed_take = {}
+            total_actor_tags = 0
+            kept_tags = 0
+
+            for line_num in range(start_line, end_line + 1):
+                line_key = f"line_{line_num}"
+                if line_key in llm_decision:
+                    reviewed_take[line_num] = llm_decision[line_key]
+
+                    # Count tags for metrics
+                    if line_num in actor_take["result"]:
+                        original_text = state.original_lines[line_num]["text"]
+                        actor_text = actor_take["result"][line_num]["text"]
+                        final_text = llm_decision[line_key]
+
+                        orig_tags = len(re.findall(r"\(.*?\)", original_text))
+                        actor_tags = len(re.findall(r"\(.*?\)", actor_text))
+                        final_tags = len(re.findall(r"\(.*?\)", final_text))
+
+                        total_actor_tags += max(0, actor_tags - orig_tags)
+                        kept_tags += max(0, final_tags - orig_tags)
+                elif 0 <= line_num < len(state.original_lines):
+                    # Fall back to original text
+                    reviewed_take[line_num] = state.original_lines[line_num]["text"]
+
+            review_duration = time.time() - review_start_time
+            logger.info(
+                f"Director's Final Cut (LLM): Kept {kept_tags}/{total_actor_tags} "
+                f"Actor tags in Moment {moment_id}"
+            )
+            logger.debug(
+                f"Review process for Moment {moment_id} completed in "
+                f"{review_duration:.2f}s"
+            )
+
+            return {
+                "reviewed_take": reviewed_take,
+                "review_mode_used": "llm",
+                "llm_review_failed": False,
+                "review_metrics": {
+                    "kept_tags": kept_tags,
+                    "total_actor_tags": total_actor_tags,
+                    "review_duration": review_duration,
+                },
+            }
+
+        except Exception as e:
+            review_duration = time.time() - review_start_time
+            error_msg = f"LLM review error: {str(e)}"
+            logger.warning(
+                f"LLM review failed for Moment {moment_id}, falling back to "
+                f"procedural review"
+            )
+            logger.debug(f"Error details: {error_msg}")
+
+            return {
+                "llm_review_failed": True,
+                "review_metrics": {
+                    "error": error_msg,
+                    "review_duration": review_duration,
+                },
+            }
+
+    # Router functions for Director's Final Cut
+    def route_to_review_mode(state: RehearsalStateModel) -> str:
+        """Route to appropriate review mode based on configuration and actor results."""
+        actor_take = state.actor_take
+
+        # Skip review if no actor take or budget was already exceeded
+        if not actor_take or actor_take.get("skip_due_to_budget"):
+            logger.debug(
+                "Review router directing to: finalize_moment "
+                "(skip_review - no actor take or budget exceeded)"
+            )
+            return "finalize_moment"
+
+        # Get the configured review mode
+        from shared.config import config as shared_config
+
+        review_mode = shared_config.director_agent["review"]["mode"]
+        moment_id = actor_take.get("moment_id", "unknown")
+
+        logger.info(
+            f"Director's Final Cut: Using '{review_mode}' review mode for "
+            f"Moment {moment_id}"
+        )
+
+        next_node = "llm_review" if review_mode == "llm" else "procedural_review"
+
+        logger.debug(f"Review router directing to: {next_node} (mode: {review_mode})")
+        return next_node
+
+    def route_post_llm_review(state: RehearsalStateModel) -> str:
+        """Route after LLM review - fallback to procedural or finalize."""
+        if state.llm_review_failed:
+            logger.debug(
+                "Post-LLM review router directing to: procedural_review (fallback)"
+            )
+            return "procedural_review"
+        else:
+            logger.debug("Post-LLM review router directing to: finalize_moment")
+            return "finalize_moment"
 
     @log_node("finalize_moment")
     def finalize_moment(state: RehearsalStateModel) -> Dict[str, Any]:
@@ -387,9 +675,36 @@ def build_rehearsal_graph(
                 )
 
         else:
-            # Process actor results
+            # Process actor results through Director's Final Cut
             start_time = time.time()
-            director_result = actor_take["result"]  # Pass through for now
+
+            # Use reviewed_take if available (from Director's Final Cut),
+            # otherwise fall back to actor result
+            if state.reviewed_take:
+                # Apply Director's Final Cut decisions
+                for line_num, final_text in state.reviewed_take.items():
+                    if 0 <= line_num < len(updated_lines):
+                        # Preserve original structure but update text
+                        updated_line = updated_lines[line_num].copy()
+                        updated_line["text"] = final_text
+                        updated_lines[line_num] = updated_line
+
+                # Calculate tags spent based on final reviewed version
+                director_result = {}
+                for line_num, final_text in state.reviewed_take.items():
+                    if 0 <= line_num < len(state.original_lines):
+                        director_result[line_num] = {
+                            "speaker": state.original_lines[line_num]["speaker"],
+                            "text": final_text,
+                            "global_line_number": line_num,
+                        }
+            else:
+                # Fall back to original actor result (backward compatibility)
+                director_result = actor_take["result"]
+
+                # Update finalized lines with actor's original result
+                for line_number, line_obj in director_result.items():
+                    updated_lines[line_number] = line_obj
 
             # Calculate tags spent and update budget
             tags_spent = director._calculate_tags_spent(
@@ -398,10 +713,6 @@ def build_rehearsal_graph(
             logger.info(f"Moment {primary['moment_id']} spent {tags_spent:.2f} tokens")
 
             updated_bucket.spend(tags_spent)
-
-            # Update finalized lines
-            for line_number, line_obj in director_result.items():
-                updated_lines[line_number] = line_obj
 
             # Mark primary as finalized
             updated_cache[primary["moment_id"]]["is_finalized"] = True
@@ -430,6 +741,11 @@ def build_rehearsal_graph(
             "token_bucket": serialize_token_bucket(updated_bucket),  # Serialize
             "actor_take": None,
             "last_finalized_moment_id": last_finalized_moment_id,
+            # Reset review fields to avoid cross-moment bleed
+            "reviewed_take": None,
+            "review_mode_used": None,
+            "llm_review_failed": False,
+            "review_metrics": None,
         }
 
         # Log checkpoint event for state persistence
@@ -469,9 +785,15 @@ def build_rehearsal_graph(
         RunnableLambda(actor_perform_moment),
         input_schema=RehearsalStateModel,
     )
+    # Director's Final Cut nodes
     builder.add_node(
-        "pass_through_review",
-        RunnableLambda(pass_through_review),
+        "procedural_review",
+        RunnableLambda(procedural_review_node),
+        input_schema=RehearsalStateModel,
+    )
+    builder.add_node(
+        "llm_review",
+        RunnableLambda(llm_review_node),
         input_schema=RehearsalStateModel,
     )
     builder.add_node(
@@ -488,8 +810,30 @@ def build_rehearsal_graph(
 
     # Main loop edges
     builder.add_edge("define_moment", "actor_perform_moment")
-    builder.add_edge("actor_perform_moment", "pass_through_review")
-    builder.add_edge("pass_through_review", "finalize_moment")
+
+    # Director's Final Cut routing: actor_perform_moment -> route_to_review_mode
+    builder.add_conditional_edges(
+        "actor_perform_moment",
+        route_to_review_mode,
+        {
+            "finalize_moment": "finalize_moment",
+            "procedural_review": "procedural_review",
+            "llm_review": "llm_review",
+        },
+    )
+
+    # Procedural review always goes to finalize
+    builder.add_edge("procedural_review", "finalize_moment")
+
+    # LLM review routing: llm_review -> route_post_llm_review
+    builder.add_conditional_edges(
+        "llm_review",
+        route_post_llm_review,
+        {
+            "finalize_moment": "finalize_moment",
+            "procedural_review": "procedural_review",
+        },
+    )
 
     # From finalize_moment back to conditional routing
     builder.add_conditional_edges("finalize_moment", should_continue_rehearsal)

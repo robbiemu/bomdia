@@ -445,9 +445,13 @@ class TestPersistenceAndResumption:
                     "src.components.verbal_tag_injector.actor.Actor.perform_moment",
                     mock_perform_moment,
                 ):
-                    # Mock the build_rehearsal_graph function to control the graph behavior
+                    # Mock the build_rehearsal_graph function to control the graph
+                    # behavior
                     original_build_graph = None
-                    from src.components.verbal_tag_injector.director import build_rehearsal_graph as original_build_graph_import
+                    from src.components.verbal_tag_injector.director import (
+                        build_rehearsal_graph as original_build_graph_import,
+                    )
+
                     original_build_graph = original_build_graph_import
 
                     def mock_build_graph(director, checkpointer=None):
@@ -469,7 +473,10 @@ class TestPersistenceAndResumption:
                         graph.invoke = patched_invoke
                         return graph
 
-                    with patch("src.components.verbal_tag_injector.director.build_rehearsal_graph", mock_build_graph):
+                    with patch(
+                        "src.components.verbal_tag_injector.director.build_rehearsal_graph",
+                        mock_build_graph,
+                    ):
                         # Instantiate the first Director
                         director1 = Director(transcript)
 

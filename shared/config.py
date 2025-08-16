@@ -130,6 +130,15 @@ class Config:
         if rate_control:
             self.director_agent["rate_control"] = rate_control
 
+        # Add review settings from app config to director_agent
+        review_cfg = self._file_config.get("director_agent", {}).get("review", {})
+        review_mode = os.environ.get(
+            "DIRECTOR_AGENT_REVIEW_MODE", review_cfg.get("mode", "procedural")
+        )
+        if "review" not in self.director_agent:
+            self.director_agent["review"] = {}
+        self.director_agent["review"]["mode"] = review_mode
+
     @property
     def REHEARSAL_CHECKPOINT_PATH(self) -> str:
         """Get the rehearsal checkpoint path."""

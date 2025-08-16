@@ -27,12 +27,56 @@ The Actor is responsible for:
 1.  **Setup**: The Director initializes the transcript, generates a global summary, and sets up the token bucket for pacing.
 2.  **Graph-Based Rehearsal**: The Director's orchestration logic is managed by a **LangGraph state machine**. This graph iterates through the script's state (`current_line_index`), discovering and defining moments in a persistent and resumable workflow.
 3.  **Performance**: When a moment is complete, the Director delegates to the Actor to perform the moment.
-4.  **Review**: The Director reviews the Actor's performance and finalizes the moment.
-5.  **Recomposition**: The edited lines are placed back into the final script.
+4.  **Director's Final Cut**: The Director reviews the Actor's performance through one of two modes:
+    -   **Procedural Mode** (default): Fast, rule-based tag pruning that removes the last N newly added tags to meet the budget.
+    -   **LLM Mode**: Slower, higher-quality LLM-based review that uses contextual intelligence to choose which tags to keep or remove.
+5.  **Fallback Protection**: If LLM mode fails, the system automatically falls back to procedural mode with detailed logging.
+6.  **Recomposition**: The reviewed lines are placed back into the final script.
+
+## Director's Final Cut
+
+The Director's Final Cut is a quality control phase that ensures Actor performances comply with strict budget constraints while preserving the most impactful verbal tags.
+
+### Review Modes
+
+#### Procedural Mode (Default)
+
+-   **Speed**: Fast, algorithmic processing
+-   **Logic**: Removes the last N newly added tags in reading order to meet budget
+-   **Use Case**: Production environments where speed is critical
+-   **Reliability**: Deterministic, always produces budget-compliant results
+
+#### LLM Mode
+
+-   **Speed**: Slower due to additional LLM call
+-   **Logic**: Uses contextual intelligence to choose which tags to preserve based on:
+    -   Narrative importance
+    -   Character motivation
+    -   Emotional impact
+    -   Global script context
+-   **Use Case**: High-quality productions where nuanced tag selection is valuable
+-   **Reliability**: Includes automatic fallback to procedural mode on failure
+
+### Configuration
+
+```toml
+[director_agent.review]
+mode = "procedural"  # or "llm"
+```
+
+Environment override: `DIRECTOR_AGENT_REVIEW_MODE=llm`
+
+### Routing and Fallback
+
+1. **Mode Selection**: Based on configuration, routes to appropriate review node
+2. **LLM Review**: If selected, attempts intelligent tag curation
+3. **Fallback Protection**: On LLM failure (network issues, malformed JSON, etc.), automatically falls back to procedural mode
+4. **Error Logging**: All fallback events are logged with detailed error information for debugging
 
 ## Key Features
 
 -   **Deterministic Tag Budgeting**: The number of new tags is calculated based on the script length.
+-   **Quality Control**: Director's Final Cut ensures budget compliance while maximizing tag value.
 -   **Robust Error Recovery**: The system can handle errors from the LLM, such as invalid JSON or moment boundaries.
 -   **Performance Optimization**: The number of LLM calls is minimized by processing entire moments at once.
 -   **Narrative Intelligence**: Moments are defined based on the story's logic, not just technical boundaries.

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Persistent, Resumable Rehearsals:** Implemented `SqliteSaver` checkpointing for the agentic workflow. The process can now be safely interrupted and will automatically resume from the last completed line, saving time and compute on long transcripts.
 - A comprehensive integration test to verify the "crash-and-resume" functionality of the new persistence layer.
+- **Director's Final Cut:** Implemented a new, configurable review step in the agentic workflow to enforce verbal tag budgets. This includes two modes: a fast, rule-based "procedural" review and a higher-quality, context-aware "llm" review, with automatic fallback protection to ensure robustness.
 
 ### Changed
 - **Agentic Workflow Engine:** Refactored the core agentic orchestrator from a procedural `for` loop to a formal LangGraph state machine. This significantly improves robustness, modularity, and enables the new stateful, resumable operations.

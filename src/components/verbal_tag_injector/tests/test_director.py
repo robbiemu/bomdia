@@ -219,6 +219,17 @@ def test_run_rehearsal_with_new_tag_injection_and_budget(
 
 
 @patch("shared.config.config.MAX_TAG_RATE", 1)
+@patch(
+    "shared.config.config.director_agent",
+    {
+        "review": {"mode": "procedural"},
+        "global_summary_prompt": "Global summary: {transcript_text}",
+        "unified_moment_analysis_prompt": "Analyze: {local_context}",
+        "moment_definition_prompt": "Define moments: {forward_script_slice_text}",
+        "previous_moment_template": "Previous: {last_moment_summary}",
+        "rate_control": {"target_tag_rate": 0.10, "tag_burst_allowance": 3},
+    },
+)
 def test_pivot_line_forward_cascading_edits(mock_llm_invoker):
     """Test that pivot lines are correctly handled with forward-cascading edits."""
     # Create a simple transcript with consecutive lines from the same speaker

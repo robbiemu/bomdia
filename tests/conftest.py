@@ -1,7 +1,6 @@
 """Test configuration and fixtures for the bomdia project."""
 
 import os
-import pytest
 
 
 def pytest_configure(config):

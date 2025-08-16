@@ -49,6 +49,49 @@ quota_exceeded_note = """
 (Automated message: The production's budget for verbal tags has been met. Do not add any new parenthetical tags.)
 """
 
+# Prompt for the Director to review and finalize an Actor's performance for a moment.
+director_review_prompt = """
+You are a meticulous Script Director, responsible for the final cut of a performance. Your task is to review a "take" from a voice actor and create the final, approved version of the script for a specific narrative moment, ensuring it adheres to a strict budget for new verbal tags.
+
+**CONTEXT**
+
+*   **Global Summary:** {global_summary}
+*   **Previous Moment Performance:** This is the finalized script from the moment that just concluded. It was about "{last_moment_summary}".
+    ---
+    {previous_moment_performance_text}
+    ---
+*   **Current Moment - Original Script:** This is the script before the Actor's performance.
+    ---
+    {original_script_text}
+    ---
+*   **Actor's Performance (Your 'Take' to Review):** This is the version submitted by the Actor, which may include new verbal tags.
+    ---
+    {actor_performance_text}
+    ---
+
+**YOUR DIRECTIVE**
+
+You have a budget to add a maximum of **{tag_budget}** new verbal tags for this entire moment. Your primary goal is to ensure the final script does not exceed this budget.
+
+1.  **Review the Performance:** Compare the "Original Script" to the "Actor's Performance." Identify all the new parenthetical verbal tags (e.g., `(laughs)`, `(sighs)`) the Actor added.
+2.  **Enforce the Budget:**
+    *   If the number of new tags is **over budget**, you MUST revert some of the Actor's changes back to the original text until the budget is met. Preserve the most impactful and contextually motivated additions.
+    *   If the performance is **within budget**, you should approve it as-is, unless a change feels genuinely out of place or unmotivated.
+3.  **Editing Constraint:** Your editing is strictly limited. To construct the final script, you must decide for each line whether to **keep** the Actor's version or **revert** some or all of it to the original text. You **cannot** write new dialogue, add your own creative tags, or modify the text in any other way.
+
+**OUTPUT FORMAT**
+
+Respond with ONLY a JSON object that maps each line's global line number to its final, approved text.
+
+Example:
+{{
+  "line_{start_line}": "Final text for the first line in the moment.",
+  "line_{start_line_plus_1}": "Final text for the second line, which may have been reverted to its original version."
+}}
+
+Do not include any other text, explanations, or markdown formatting in your response.
+"""
+
 
 [actor_agent]
 # Template for the Actor's moment-based task.
