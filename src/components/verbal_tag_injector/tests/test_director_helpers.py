@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from src.components.verbal_tag_injector.director import Director
 
 
 @pytest.fixture
@@ -26,12 +27,21 @@ class MockConfig:
         self.LLM_PARAMETERS = {}
         self.MAX_TAG_RATE = 0.15
         self.PAUSE_PLACEHOLDER = "[insert-verbal-tag-for-pause]"
+        self.REHEARSAL_CHECKPOINT_PATH = ":memory:"
 
         # Create director_agent as a dict to support dictionary access
         self.director_agent = {
             "global_summary_prompt": "Global summary: {transcript_text}",
             "unified_moment_analysis_prompt": (
                 "Analyze: {local_context}, {current_line}"
+            ),
+            "moment_definition_prompt": (
+                "Define moment: {previous_moment_segment}, "
+                "{forward_script_slice_text}, {line_number}"
+            ),
+            "previous_moment_template": (
+                "Previous moment: {last_moment_summary}, "
+                "{last_moment_end_line}, {last_finalized_line_text}"
             ),
             "rate_control": {"target_tag_rate": 0.10, "tag_burst_allowance": 3},
             "review": {"mode": "procedural"},
@@ -95,102 +105,61 @@ def test_run_rehearsal_skips_line_when_no_tokens_available(sample_transcript):
 
     # Patch the config import in the director module
     with patch("src.components.verbal_tag_injector.director.config", mock_config):
+        director = Director(sample_transcript)
+
+        # Mock actor perform_moment to return lines with new tags
         with patch(
-            "src.components.verbal_tag_injector.director.LiteLLMInvoker"
-        ) as mock_llm_class:
-            mock_llm_instance = MagicMock()
+            "src.components.verbal_tag_injector.actor.Actor.perform_moment"
+        ) as mock_actor:
+            mock_actor.return_value = {
+                0: {
+                    "speaker": "S1",
+                    "text": "Hello there.",
+                    "global_line_number": 0,
+                },
+                1: {
+                    "speaker": "S2",
+                    "text": "(laughs) General Kenobi. You are a bold one.",
+                    "global_line_number": 1,
+                },
+                2: {
+                    "speaker": "S1",
+                    "text": "I love this place!",
+                    "global_line_number": 2,
+                },
+                3: {
+                    "speaker": "S2",
+                    "text": "Suddenly, everything changed.",
+                    "global_line_number": 3,
+                },
+                4: {
+                    "speaker": "S1",
+                    "text": "Are you sure?",
+                    "global_line_number": 4,
+                },
+                5: {
+                    "speaker": "S2",
+                    "text": "Yes, I am certain.",
+                    "global_line_number": 5,
+                },
+                6: {
+                    "speaker": "S1",
+                    "text": "(sighs) This is a lot to take in.",
+                    "global_line_number": 6,
+                },
+                7: {
+                    "speaker": "S2",
+                    "text": "We must hurry!",
+                    "global_line_number": 7,
+                },
+            }
 
-            # Set up mock responses for global summary and moment definitions
-            mock_global_summary = MagicMock()
-            mock_global_summary.content = "Mock global summary"
+            # Run the rehearsal
+            final_script = director.run_rehearsal()
 
-            mock_moment_definition = MagicMock()
-            mock_moment_definition.content = """[
-  {
-    "moment_id": "moment_0",
-    "start_line": 0,
-    "end_line": 0,
-    "description": "Single line moment"
-  }
-]"""
-
-            mock_llm_instance.invoke.side_effect = [
-                mock_global_summary,
-                mock_moment_definition,
-                mock_moment_definition,
-                mock_moment_definition,
-                mock_moment_definition,
-                mock_moment_definition,
-                mock_moment_definition,
-                mock_moment_definition,
-                mock_moment_definition,
-            ]
-
-            mock_llm_class.return_value = mock_llm_instance
-
-            # We need to reload the module to ensure our mock is used
-            import importlib
-
-            import src.components.verbal_tag_injector.director
-
-            importlib.reload(src.components.verbal_tag_injector.director)
-            from src.components.verbal_tag_injector.director import Director
-
-            director = Director(sample_transcript)
-
-            # Mock actor perform_moment to return lines with new tags
-            with patch(
-                "src.components.verbal_tag_injector.actor.Actor.perform_moment"
-            ) as mock_actor:
-                mock_actor.return_value = {
-                    0: {
-                        "speaker": "S1",
-                        "text": "Hello there.",
-                        "global_line_number": 0,
-                    },
-                    1: {
-                        "speaker": "S2",
-                        "text": "(laughs) General Kenobi. You are a bold one.",
-                        "global_line_number": 1,
-                    },
-                    2: {
-                        "speaker": "S1",
-                        "text": "I love this place!",
-                        "global_line_number": 2,
-                    },
-                    3: {
-                        "speaker": "S2",
-                        "text": "Suddenly, everything changed.",
-                        "global_line_number": 3,
-                    },
-                    4: {
-                        "speaker": "S1",
-                        "text": "Are you sure?",
-                        "global_line_number": 4,
-                    },
-                    5: {
-                        "speaker": "S2",
-                        "text": "Yes, I am certain.",
-                        "global_line_number": 5,
-                    },
-                    6: {
-                        "speaker": "S1",
-                        "text": "(sighs) This is a lot to take in.",
-                        "global_line_number": 6,
-                    },
-                    7: {
-                        "speaker": "S2",
-                        "text": "We must hurry!",
-                        "global_line_number": 7,
-                    },
-                }
-
-                # Run the rehearsal
-                final_script = director.run_rehearsal()
-
-                # In our new implementation, we don't automatically strip tags
-                # The actor decides what to do
-                assert "(laughs)" in final_script[1]["text"]  # Line with tag
+            # In our new implementation, we don't automatically strip tags
+            # The actor decides what to do
+            assert "(laughs)" in final_script[1]["text"]  # Line with tag
 
 
 def test_logging_when_skipping_candidate_lines_due_to_tokens(sample_transcript):

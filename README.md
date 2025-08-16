@@ -30,6 +30,41 @@ pip install -e .
 bomdia input_transcript.txt output_podcast.mp3
 ```
 
+### Voice Cloning Options
+
+The application supports different voice generation modes for each voice, including:
+
+-  **High-Fidelity Cloning**: Provide both an audio prompt and its matching transcript for the most accurate voice cloning
+-  **Consistent Pure TTS**: No voice prompt provided, system generates a consistent voice automatically
+
+```bash
+# High-Fidelity Cloning (requires both --sX-voice and --sX-transcript)
+bomdia --s1-voice speaker1.wav --s1-transcript "This is what speaker 1 sounds like" input_transcript.txt output_podcast.mp3
+
+# Consistent Pure TTS (no voice prompts, system generates consistent voices)
+bomdia input_transcript.txt output_podcast.mp3
+```
+
+The input audio should be in WAV format. See the Dia TTS project for recommendations on best practices regarding audio (length and transcript).
+
+Although not documented, and a clear recommendation is made to use transcripts in the official DiaTTS project, it is technically possible to generate voice cloning without the correspodning transcript:
+
+```bash
+# Voice Prompt Cloning (only --sX-voice)
+bomdia --s1-voice speaker1.wav --s2-voice speaker2.wav input_transcript.txt output_podcast.mp3
+```
+
+### Seeding for Voice Consistency
+
+When using Consistent Pure TTS mode for speakers in multi-block transcripts, a seed is mandatory for voice consistency.
+
+```bash
+# Provide your own seed for reproducible results
+bomdia --seed 12345 input_transcript.txt output_podcast.mp3
+```
+
+If not provided, the application will generate a secure random seed and log it for reproducibility.
+
 ### Verbosity Control
 
 The application provides two flags for controlling output verbosity:
