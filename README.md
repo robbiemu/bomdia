@@ -13,6 +13,8 @@ Bom Dia is a tool that converts text transcripts into podcast-style audio files 
 
 ## Installation
 
+At this time installation is not beginner friendly. see [DIA_CHANGES.md](DIA_CHANGES.md) for prerequisite changes to Dia TTS to get started.
+
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -49,16 +51,20 @@ bomdia input_transcript.txt output_podcast.mp3
 
 ## Configuration
 
+For more details, see the full [Configuration Guide](CONFIGURATION.md).
+
 ### LLM Configuration
 
-This project uses LiteLLM to support various LLM providers. Configure your model in `config/app.toml`:
+This project uses LiteLLM to support various LLM providers. Configure your model and parameters in `config/app.toml`:
 
 ```toml
 [model]
-# LiteLLM model string.
-# OpenAI example: "openai/gpt-4o-mini"
-# Ollama example: "ollama/llama3"
-llm_spec = "ollama/llama3"
+# LiteLLM model string. Examples:
+# "openai/gpt-4o-mini"
+# "ollama/llama3"
+# "mistral/mistral-large-latest"
+# "openrouter/openai/gpt-4o-mini"
+llm_spec = "openai/gpt-4o-mini"
 
 [model.parameters]
 # Optional parameters to pass to the model
@@ -67,9 +73,12 @@ max_tokens = 150
 ```
 
 **Environment Variables:**
-- For **OpenAI**, set `OPENAI_API_KEY`.
-- For **Ollama**, ensure your Ollama server is running. If it's not at the default `http://localhost:11434`, set `OLLAMA_API_BASE`.
-- For other providers (Anthropic, Gemini, etc.), see the LiteLLM documentation for required environment variables.
+You must also set the appropriate environment variables for your chosen provider.
+
+-   For **OpenAI**, set `OPENAI_API_KEY`.
+-   For **Mistral AI**, set `MISTRAL_API_KEY`.
+-   For **OpenRouter**, set `OPENROUTER_API_KEY`.
+-   For **Ollama** or other **OpenAI-Compatible Endpoints**, ensure the local server is running. You may need to set `OPENAI_API_BASE` or `OLLAMA_API_BASE` if it's not at the default address.
 
 ### Other Configuration
 
@@ -94,13 +103,16 @@ The tests use in-memory SQLite databases to prevent polluting the repository wit
 
 ```bash
 # Format code
-black .
+black src/ shared/ main.py
 
 # Lint code
-ruff check .
+ruff check  src/ shared/ tests/ main.py
 
 # Type check
-mypy src shared
+mypy shared/ src/ main.py
+
+# Security sanity check
+bandit -c pyproject.toml -r src/ shared/ tests/ main.py
 ```
 
 ## Components
@@ -112,6 +124,10 @@ For detailed information about specific components, see the [components document
 - [Transcript Parser](src/components/transcript_parser/) - Transcript parsing and processing
 - [Verbal Tag Injector](docs/components/verbal_tag_injector.md) - Agentic verbal tag injection logic
 
-## External Dependency Warnings
+## Versioning and Changelog
 
-See [EXTERNAL_DEPENDENCY_WARNINGS.md](EXTERNAL_DEPENDENCY_WARNINGS.md) for information about expected warnings from external dependencies.
+See [CHANGELOG.md](CHANGELOG.md) for information about releases related to version numbers. The [pyproject.toml](pyproject.toml) is the authoritative source for the current version number.
+
+## License
+
+This project is released under the Apache 2.0 license (see [License](LICENSE)). This is was chosen because of a commitment to OSS, and it is the same license as Dia TTS uses that the project relies on (at the time of writing).
