@@ -5,7 +5,7 @@ This file contains the core pipeline for converting a transcript to a podcast.
 
 import logging
 import os
-import secrets
+import random
 import shutil
 import tempfile
 from typing import Dict, Optional
@@ -104,7 +104,7 @@ def run_pipeline(
 
         if unprompted_speakers and len(mini_transcripts) > 1 and seed is None:
             # Generate a secure random seed if one is required but not provided
-            seed = secrets.randbelow(2**32 - 1)
+            seed = random.randint(0, 2**32 - 1)  # nosec B311
             logger.debug(
                 "No seed provided for consistent voice generation; using "
                 f"auto-generated seed: {seed}"

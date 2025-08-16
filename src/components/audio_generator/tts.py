@@ -65,7 +65,7 @@ class DiaTTS:
             compute_dtype=compute_dtype,
             device=self.device,
         )
-        self._voice_prompt_details = {}
+        self._voice_prompt_details: Dict[str, Dict[str, Optional[str]]] = {}
 
         logger.info("Model loaded successfully.")
 
@@ -106,8 +106,7 @@ class DiaTTS:
 
         if prompts_to_embed:
             logger.info(
-                "Generating speaker embeddings for: "
-                f"{list(prompts_to_embed.keys())}"
+                "Generating speaker embeddings for: " f"{list(prompts_to_embed.keys())}"
             )
             try:
                 embeddings = self.model.generate_speaker_embedding(

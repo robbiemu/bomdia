@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.5] - 2025-08-16
+
+### Added
+- **Enhanced Voice Generation**: Added Dia's high-quality voice cloning:
+  * High-Fidelity Cloning: Users can now provide both an audio prompt and its matching transcript via new `--s{1|2}-transcript` flags for the most accurate voice cloning
+- **Mandatory Seeding Policy**: Implemented a strict seeding policy for consistent voice generation:
+  * When any speaker uses Pure TTS mode and the generation spans multiple audio blocks, a seed is mandatory
+  * If no seed is provided, the application generates a secure random seed and logs it for reproducibility
+  * The chosen seed is reset before every block generation to ensure voice consistency
+
 ## [0.1.4] - 2025-08-15
 
 ### Added
