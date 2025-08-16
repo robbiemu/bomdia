@@ -7,7 +7,6 @@ from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 from langchain_core.runnables.config import RunnableConfig
-from langgraph.pregel import Pregel
 from shared.config import config
 from shared.llm_invoker import LiteLLMInvoker
 from shared.logging import get_logger
@@ -539,7 +538,7 @@ class Director:
             check_same_thread=False,
         )
         checkpointer = SqliteSaver(conn)
-        graph: Pregel = build_rehearsal_graph(self, checkpointer)
+        graph = build_rehearsal_graph(self, checkpointer)
         runnable_config: RunnableConfig = {
             "configurable": {"thread_id": thread_id},
             "recursion_limit": max(
@@ -582,23 +581,55 @@ class Director:
         )
 
         start_time = time.time()
-        final_state_dict = graph.invoke(
-            initial_state.model_dump(), config=runnable_config
-        )
-        final_state = RehearsalStateModel.model_validate(final_state_dict)
+        final_state = graph.invoke(initial_state, config=runnable_config)
         total_duration = time.time() - start_time
 
         # Synchronize Director fields from final state for test compatibility
-        self.finalized_lines = final_state.finalized_lines
-        self.moment_cache = final_state.moment_cache
-        self.line_to_moment_map = final_state.line_to_moment_map
-        self.finalized_moments = {
-            mid
-            for mid, m in self.moment_cache.items()
-            if isinstance(m, dict) and m.get("is_finalized")
-        }
+        if hasattr(final_state, "finalized_lines"):
+            self.finalized_lines = final_state.finalized_lines
+        else:
+            # Handle case where final_state is a dict (fallback)
+            self.finalized_lines = final_state.get(
+                "finalized_lines", deepcopy(self.finalized_lines)
+            )
 
-        last_finalized_id = final_state.last_finalized_moment_id
+        if hasattr(final_state, "moment_cache"):
+            self.moment_cache = final_state.moment_cache
+        else:
+            self.moment_cache = final_state.get(
+                "moment_cache", deepcopy(self.moment_cache)
+            )
+
+        if hasattr(final_state, "line_to_moment_map"):
+            self.line_to_moment_map = final_state.line_to_moment_map
+        else:
+            self.line_to_moment_map = final_state.get(
+                "line_to_moment_map", deepcopy(self.line_to_moment_map)
+            )
+
+        if hasattr(final_state, "finalized_moments"):
+            self.finalized_moments = {
+                mid
+                for mid, m in self.moment_cache.items()
+                if isinstance(m, dict) and m.get("is_finalized")
+            }
+        else:
+            # Handle case where final_state is a dict (fallback)
+            self.finalized_moments = final_state.get(
+                "finalized_moments",
+                {
+                    mid
+                    for mid, m in self.moment_cache.items()
+                    if isinstance(m, dict) and m.get("is_finalized")
+                },
+            )
+
+        last_finalized_id = None
+        if hasattr(final_state, "last_finalized_moment_id"):
+            last_finalized_id = final_state.last_finalized_moment_id
+        else:
+            last_finalized_id = final_state.get("last_finalized_moment_id", None)
+
         if (
             last_finalized_id
             and isinstance(last_finalized_id, str)
@@ -609,17 +640,43 @@ class Director:
             self.last_finalized_moment = None
 
         # Restore token bucket from serialized state
-        if isinstance(final_state.token_bucket, dict):
-            self.token_bucket = TokenBucket.from_dict(final_state.token_bucket)
+        token_bucket_data = None
+        if hasattr(final_state, "token_bucket"):
+            token_bucket_data = final_state.token_bucket
         else:
-            self.token_bucket = final_state.token_bucket
+            token_bucket_data = final_state.get("token_bucket", None)
+
+        if isinstance(token_bucket_data, dict):
+            self.token_bucket = TokenBucket.from_dict(token_bucket_data)
+        elif token_bucket_data is not None:
+            self.token_bucket = token_bucket_data
+        # else keep existing self.token_bucket
 
         # Update global tag usage from final state
         from src.components.verbal_tag_injector.rehearsal_graph import (
             compute_global_tags_used,
         )
 
-        self.global_tags_used = compute_global_tags_used(final_state)
+        # Handle both RehearsalStateModel object and dict
+        if isinstance(final_state, RehearsalStateModel):
+            # It's a RehearsalStateModel object
+            self.global_tags_used = compute_global_tags_used(final_state)
+        else:
+            # It's a dict, create a temporary RehearsalStateModel
+            try:
+                temp_state = RehearsalStateModel.model_validate(final_state)
+                self.global_tags_used = compute_global_tags_used(temp_state)
+            except Exception:
+                # Fallback calculation
+                self.global_tags_used = 0
+                original_lines = final_state.get("original_lines", self.original_lines)
+                finalized_lines = final_state.get(
+                    "finalized_lines", self.finalized_lines
+                )
+                for orig, fin in zip(original_lines, finalized_lines, strict=False):
+                    original_count = len(re.findall(r"\(.*?\)", orig["text"]))
+                    final_count = len(re.findall(r"\(.*?\)", fin["text"]))
+                    self.global_tags_used += max(0, final_count - original_count)
 
         # Log completion
         total_lines = len(self.original_lines)
