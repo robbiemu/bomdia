@@ -122,6 +122,16 @@ class DiaTTS:
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
+
+        if self.device is None:
+            msg = (
+                "Unreachable state in DiaTTS - _set_seed() called without "
+                "initializing self.device"
+            )
+            logger.error(msg)
+            raise NotImplementedError(msg)
+        torch.Generator(device=torch.device(self.device)).manual_seed(seed)
+
         torch.use_deterministic_algorithms(True)
         if self.device == "cuda" and torch.cuda.is_available():
             torch.cuda.manual_seed(seed)
