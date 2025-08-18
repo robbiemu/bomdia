@@ -8,7 +8,7 @@ import os
 import random
 import re
 import tempfile
-from typing import Dict, Optional
+from typing import Dict, List, Match, Optional
 
 from pydub import AudioSegment
 from shared.config import config
@@ -133,6 +133,35 @@ def run_pipeline(
                 raise ValueError(
                     "No mini-transcripts generated from the input"
                 ) from None
+
+            # Post-process chunks: strip newlines and add speaker continuity tags
+            processed_mini_transcripts = []
+            for chunk in mini_transcripts:
+                # Strip all newlines and replace with two spaces
+                processed_chunk = chunk.replace("\n", "  ")
+
+                # Add speaker continuity tag at the end
+                # Find the last speaker in the chunk
+                last_speaker: Optional[str] = None
+                for chunk_line in reversed(chunk.split("\n")):
+                    speaker_match: Optional[Match[str]] = re.match(
+                        r"^\[(S\d+)\]", chunk_line
+                    )
+                    if speaker_match:
+                        last_speaker = speaker_match.group(1)
+                        break
+
+                # Add the appropriate speaker tag at the end
+                if last_speaker:
+                    if last_speaker == "S1":
+                        processed_chunk += "  [S2]"
+                    elif last_speaker == "S2":
+                        processed_chunk += "  [S1]"
+
+                processed_mini_transcripts.append(processed_chunk)
+
+            mini_transcripts = processed_mini_transcripts
+
             logger.info(
                 f"Produced {len(mini_transcripts)} mini-transcript blocks "
                 f"(5-10s preferred)."
