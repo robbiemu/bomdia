@@ -1,4 +1,14 @@
-[S1] Hey, I thought we should –
-[S2] Yeah, I was thinking the same.
-[S1] Oh? So, what do you want to get them then?
-[S2] No! what? I thought you meant we should grab something to eat.
+[S1] I've been staring at this quarterly report for hours.
+[S2] Tell me about it. The numbers for the marketing campaign just aren't adding up.
+[S1] Exactly! It's like we're missing a key piece of data somewhere.
+[S2] I triple-checked the source files this morning. They're correct.
+[S1] So the problem is in the analysis itself... great.
+[S2] Maybe we should just take a break for five minutes. Staring won't help.
+[S1] You're probably right. My brain is completely fried.
+[S2] Hey, on a completely different note, did you end up going to that concert on Saturday?
+[S1] Oh, I did! It was absolutely incredible.
+[S2] No way! I'm so jealous. I heard they played an encore.
+[S1] They played three! The whole place was electric.
+[S2] Okay, now you're just rubbing it in.
+[S1] Maybe a little. It was just what I needed after this week.
+[S2] Alright, alright, back to the report?

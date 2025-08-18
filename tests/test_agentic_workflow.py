@@ -9,6 +9,7 @@ import wave
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+from pydub import AudioSegment
 from src.components.verbal_tag_injector.director import Director
 from src.pipeline import run_pipeline
 
@@ -34,16 +35,17 @@ class TestAgenticWorkflow(unittest.TestCase):
                 def __init__(self, model_checkpoint, revision=None, seed=None, log_level=None):
                     pass
 
-                def text_to_audio_file(self, text, path):
+                def generate(self, texts, unified_audio_prompt, unified_transcript_prompt):
                     # Create a simple WAV file with minimal content
-                    with wave.open(path, "wb") as wav_file:
-                        wav_file.setnchannels(1)  # Mono
-                        wav_file.setsampwidth(2)  # 16-bit
-                        wav_file.setframerate(22050)  # Sample rate
-                        # Create minimal audio data (0.1 seconds of silence)
-                        frames = int(0.1 * 22050)
-                        data = np.zeros(frames, dtype=np.int16)
-                        wav_file.writeframes(data.tobytes())
+                    segments = []
+                    for _ in texts:
+                        # Create a simple silent AudioSegment
+                        segment = AudioSegment.silent(duration=100) # 100ms of silence
+                        segments.append(segment)
+                    return segments
+
+                def register_voice_prompts(self, voice_prompts):
+                    pass
 
             # Mock the LLM invoker to avoid network calls
             class MockLLMInvoker:
