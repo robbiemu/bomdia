@@ -8,6 +8,7 @@ This guide covers all configuration options available in `config/app.toml` and `
   - [app.toml Configuration](#apptoml-configuration)
     - [Model Settings](#model-settings)
     - [Pipeline Settings](#pipeline-settings)
+    - [Director Agent Rate Control](#director-agent-rate-control)
     - [Tags Configuration](#tags-configuration)
   - [Persistence and Checkpointing](#persistence-and-checkpointing)
     - [Checkpointing Behavior](#checkpointing-behavior)
@@ -23,6 +24,7 @@ This guide covers all configuration options available in `config/app.toml` and `
     - [Director Agent Prompts](#director-agent-prompts)
     - [Actor Agent Prompts](#actor-agent-prompts)
   - [Troubleshooting Configuration Issues](#troubleshooting-configuration-issues)
+  - [Logging and Observability](#logging-and-observability)
 
 ## app.toml Configuration
 
@@ -97,9 +99,6 @@ max_tag_rate = 0.15
 
 # Average words per second for audio estimation
 avg_wps = 2.5
-
-# Maximum tokens for Dia generation
-max_new_tokens_cap = 1600
 
 # Default random seed for reproducible voice selection
 # Note: When using pure TTS mode for speakers in multi-block transcripts,
