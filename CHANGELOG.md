@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.7]
 
 ### Changed
+- **Post-processes transcript chunks*** for continuity
 - **Conversion to Batch mode processing** Making use of the batch mode processing provided by Dia's generate() method.
 
 ### Fixed
