@@ -172,6 +172,26 @@ class Config:
             self.director_agent["review"] = {}
         self.director_agent["review"]["mode"] = review_mode
 
+        # Synthetic prompt generation settings
+        self.GENERATE_SYNTHETIC_PROMPTS = (
+            os.environ.get(
+                "GENERATE_SYNTHETIC_PROMPTS",
+                str(
+                    self._file_config.get("pipeline", {}).get(
+                        "generate_synthetic_prompts", True
+                    )
+                ),
+            ).lower()
+            == "true"
+        )
+
+        self.GENERATE_PROMPT_OUTPUT_DIR = os.environ.get(
+            "GENERATE_PROMPT_OUTPUT_DIR",
+            self._file_config.get("generate_prompt", {}).get(
+                "output_dir", "synthetic_prompts"
+            ),
+        )
+
     @property
     def REHEARSAL_CHECKPOINT_PATH(self) -> str:
         """Get the rehearsal checkpoint path."""

@@ -50,6 +50,7 @@ nari-tts = { path = "../dia" }
 
 [project.scripts]
 bomdia = "main:main"
+generate-prompt = "generate_prompt:main"
 
 #-- Tooling --#
 

@@ -4,8 +4,6 @@ import os
 import unittest
 from unittest.mock import patch
 
-import torch
-
 from shared.config import Config
 from src.components.audio_generator.tts import _get_device
 
@@ -87,13 +85,19 @@ class TestDeviceSelection(unittest.TestCase):
 
     @patch("torch.cuda.is_available")
     @patch("torch.backends.mps.is_available")
-    def test_config_override_cuda_unavailable(self, mock_mps_available, mock_cuda_available):
-        """Test config override with CUDA device when not available falls back to auto."""
+    def test_config_override_cuda_unavailable(
+        self, mock_mps_available, mock_cuda_available
+    ):
+        """
+        Test config override with CUDA device when not available falls back to auto.
+        """
         mock_cuda_available.return_value = False
         mock_mps_available.return_value = False  # Also disable MPS to force CPU
 
         # Capture logs to verify warning is issued
-        with self.assertLogs("src.components.audio_generator.tts", level="WARNING") as log:
+        with self.assertLogs(
+            "src.components.audio_generator.tts", level="WARNING"
+        ) as log:
             # Create a config instance with device="cuda"
             config = Config.__new__(Config)
             config.DIA_DEVICE = "cuda"
@@ -103,7 +107,7 @@ class TestDeviceSelection(unittest.TestCase):
                 # Should fall back to CPU (the only available device in our mock)
                 self.assertEqual(device.type, "cpu")
                 # Check that warning was logged
-                self.assertIn("CUDA device specified but not available", log.output[0])
+                self.assertIn("CUDA specified but not available", log.output[0])
 
     @patch("torch.cuda.is_available")
     @patch("torch.backends.mps.is_available")
@@ -122,13 +126,19 @@ class TestDeviceSelection(unittest.TestCase):
 
     @patch("torch.cuda.is_available")
     @patch("torch.backends.mps.is_available")
-    def test_config_override_mps_unavailable(self, mock_mps_available, mock_cuda_available):
-        """Test config override with MPS device when not available falls back to auto."""
+    def test_config_override_mps_unavailable(
+        self, mock_mps_available, mock_cuda_available
+    ):
+        """
+        Test config override with MPS device when not available falls back to auto.
+        """
         mock_cuda_available.return_value = False
         mock_mps_available.return_value = False  # Also disable CUDA to force CPU
 
         # Capture logs to verify warning is issued
-        with self.assertLogs("src.components.audio_generator.tts", level="WARNING") as log:
+        with self.assertLogs(
+            "src.components.audio_generator.tts", level="WARNING"
+        ) as log:
             # Create a config instance with device="mps"
             config = Config.__new__(Config)
             config.DIA_DEVICE = "mps"
@@ -138,7 +148,7 @@ class TestDeviceSelection(unittest.TestCase):
                 # Should fall back to CPU (the only available device in our mock)
                 self.assertEqual(device.type, "cpu")
                 # Check that warning was logged
-                self.assertIn("MPS device specified but not available", log.output[0])
+                self.assertIn("MPS specified but not available", log.output[0])
 
     @patch("torch.cuda.is_available")
     @patch("torch.backends.mps.is_available")
@@ -163,7 +173,9 @@ class TestDeviceSelection(unittest.TestCase):
         mock_mps_available.return_value = False  # Force CPU fallback
 
         # Capture logs to verify warning is issued
-        with self.assertLogs("src.components.audio_generator.tts", level="WARNING") as log:
+        with self.assertLogs(
+            "src.components.audio_generator.tts", level="WARNING"
+        ) as log:
             # Create a config instance with an invalid device
             config = Config.__new__(Config)
             config.DIA_DEVICE = "invalid"
@@ -173,12 +185,17 @@ class TestDeviceSelection(unittest.TestCase):
                 # Should fall back to CPU
                 self.assertEqual(device.type, "cpu")
                 # Check that warning was logged
-                self.assertIn("Invalid device 'invalid' specified", log.output[0])
+                self.assertIn(
+                    "Invalid device 'invalid'. Falling back to auto-detection.",
+                    log.output[0],
+                )
 
     @patch.dict(os.environ, {"BOMDIA_DEVICE": "cpu"})
     @patch("torch.cuda.is_available")
     @patch("torch.backends.mps.is_available")
-    def test_environment_variable_override(self, mock_mps_available, mock_cuda_available):
+    def test_environment_variable_override(
+        self, mock_mps_available, mock_cuda_available
+    ):
         """Test environment variable overrides config file."""
         mock_cuda_available.return_value = True
         mock_mps_available.return_value = True
@@ -194,10 +211,14 @@ class TestDeviceSelection(unittest.TestCase):
     @patch.dict(os.environ, {"BOMDIA_DEVICE": "invalid"})
     @patch("torch.cuda.is_available", return_value=False)
     @patch("torch.backends.mps.is_available", return_value=False)
-    def test_invalid_environment_variable_fallback(self, mock_mps_available, mock_cuda_available):
+    def test_invalid_environment_variable_fallback(
+        self, mock_mps_available, mock_cuda_available
+    ):
         """Test invalid environment variable falls back to auto-detection."""
         # Capture logs to verify warning is issued
-        with self.assertLogs("src.components.audio_generator.tts", level="WARNING") as log:
+        with self.assertLogs(
+            "src.components.audio_generator.tts", level="WARNING"
+        ) as log:
             # Create a config instance
             config = Config()
 
@@ -206,7 +227,10 @@ class TestDeviceSelection(unittest.TestCase):
                 # Should fall back to CPU (the only available device in our mock)
                 self.assertEqual(device.type, "cpu")
                 # Check that warning was logged
-                self.assertIn("Invalid device 'invalid' specified", log.output[0])
+                self.assertIn(
+                    "Invalid device 'invalid'. Falling back to auto-detection.",
+                    log.output[0],
+                )
 
 
 if __name__ == "__main__":
