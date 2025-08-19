@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from src.components.verbal_tag_injector.actor import Actor
@@ -17,8 +17,17 @@ def sample_lines():
     ]
 
 
-def test_actor_perform_moment(mock_llm_invoker, sample_lines):
-    mock_llm_invoker.invoke.return_value.content = "Hello there.\nGeneral Kenobi."
+@patch("src.components.verbal_tag_injector.actor.config")
+def test_actor_perform_moment(mock_config, mock_llm_invoker, sample_lines):
+    mock_config.actor_agent = {
+        "moment_task_directive_template": (
+            "{moment_text}\n{global_summary}\n{token_budget}\n{constraints_text}\n"
+            "{available_verbal_tags}\n{available_line_combiners}"
+        )
+    }
+    mock_llm_invoker.invoke.return_value.content = (
+        '{"line_0": "Hello there.", "line_1": "General Kenobi."}'
+    )
     actor = Actor(mock_llm_invoker)
 
     result = actor.perform_moment(
@@ -44,8 +53,19 @@ def test_actor_perform_moment(mock_llm_invoker, sample_lines):
     assert result[1]["text"] == "General Kenobi."
 
 
-def test_actor_perform_moment_with_constraints(mock_llm_invoker, sample_lines):
-    mock_llm_invoker.invoke.return_value.content = "Hello there.\nGeneral Kenobi."
+@patch("src.components.verbal_tag_injector.actor.config")
+def test_actor_perform_moment_with_constraints(
+    mock_config, mock_llm_invoker, sample_lines
+):
+    mock_config.actor_agent = {
+        "moment_task_directive_template": (
+            "{moment_text}\n{global_summary}\n{token_budget}\n{constraints_text}\n"
+            "{available_verbal_tags}\n{available_line_combiners}"
+        )
+    }
+    mock_llm_invoker.invoke.return_value.content = (
+        '{"line_0": "Hello there.", "line_1": "General Kenobi."}'
+    )
     actor = Actor(mock_llm_invoker)
 
     constraints = {0: "This line is locked"}

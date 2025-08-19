@@ -203,38 +203,44 @@ def test_diatts_generate_pure_tts():
 
                 tts = DiaTTS(seed=12345)
 
-                with patch.object(tts, '_set_seed') as mock_set_seed:
-                    # Test generate method
-                    with patch("builtins.print"):  # Suppress print statements
-                        tts.generate(["[S1] Hello world"], None, None)
+                # Test generate method
+                with patch("builtins.print"):  # Suppress print statements
+                    result = tts.generate(["[S1] Hello world"], None, None)
 
-                    # Verify the methods were called
-                    mock_set_seed.assert_called_with(12345)
+                # Verify voice_seed is passed to model.generate
+                call_args, call_kwargs = mock_model.generate.call_args
+                assert call_kwargs.get("voice_seed") == 12345
+
+                # Verify result is returned correctly
+                assert len(result) == 1
 
 
-def test_diatts_set_seed():
-    """Test the _set_seed method."""
+def test_diatts_voice_seed_parameter():
+    """Test that voice_seed parameter is passed correctly to model.generate."""
+    import numpy as np
+
     with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
-            mock_dia.from_pretrained.return_value = MagicMock()
+            mock_model = MagicMock()
+            mock_dia.from_pretrained.return_value = mock_model
 
-            tts = DiaTTS(seed=12345)
+            # Mock the model.generate to return audio
+            mock_model.generate.return_value = np.array([0.1, 0.2], dtype=np.float32)
 
-            # Test _set_seed method directly
-            with (
-                patch("random.seed") as mock_random,
-                patch("numpy.random.seed") as mock_numpy,
-                patch("torch.manual_seed") as mock_torch,
-                patch("torch.cuda.manual_seed") as mock_cuda,
-                patch("torch.cuda.manual_seed_all") as mock_cuda_all,
-            ):
-                tts._set_seed(54321)
+            with patch("src.components.audio_generator.tts.config") as mock_config:
+                mock_config.DIA_GENERATE_PARAMS = {}
+                mock_config.AUDIO_SAMPLING_RATE = 22050
+                mock_config.AUDIO_SAMPLE_WIDTH = 2
+                mock_config.AUDIO_CHANNELS = 1
 
-                # Verify the methods were called
-                mock_random.assert_called_with(54321)
-                mock_numpy.assert_called_with(54321)
-                mock_torch.assert_called_with(54321)
+                # Test that voice_seed is passed when seed is provided
+                tts = DiaTTS(seed=54321)
+                tts.generate(["[S1] Hello world"], None, None)
+
+                # Verify voice_seed parameter was passed to model.generate
+                call_args, call_kwargs = mock_model.generate.call_args
+                assert call_kwargs.get("voice_seed") == 54321
 
 
 def test_diatts_generate_batch():
@@ -345,8 +351,8 @@ def test_diatts_generate_no_prompts():
                 assert len(audio_segments) == 1
 
 
-def test_diatts_generate_pure_tts_seeding():
-    """Test generate method with pure TTS seeding."""
+def test_diatts_generate_voice_seed_consistency():
+    """Test generate method passes voice_seed consistently."""
     import numpy as np
 
     with patch("src.components.audio_generator.tts._get_device") as mock_device:
@@ -368,16 +374,15 @@ def test_diatts_generate_pure_tts_seeding():
 
                 tts = DiaTTS(seed=12345)
 
-                # Mock _set_seed to verify it's called for pure TTS
-                with patch.object(tts, '_set_seed') as mock_set_seed:
-                    # Test with text that has speaker not in voice prompts (pure TTS)
-                    texts = ["[S3] Hello world"]  # S3 not in voice prompts
+                # Test with text that requires voice_seed parameter
+                texts = ["[S3] Hello world"]
 
-                    with patch("builtins.print"):  # Suppress print statements
-                        tts.generate(texts, None, None)
+                with patch("builtins.print"):  # Suppress print statements
+                    tts.generate(texts, None, None)
 
-                    # Verify seed was reset for pure TTS generation
-                    mock_set_seed.assert_called_with(12345)
+                # Verify voice_seed was passed to model.generate
+                call_args, call_kwargs = mock_model.generate.call_args
+                assert call_kwargs.get("voice_seed") == 12345
 
 
 def test_diatts_generate_empty_input():
