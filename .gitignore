@@ -47,6 +47,6 @@ combined.md
 *.mp3
 *.sqlite
 *.sqlite-*
-
 .coverage
 *.task.md
+synthetic_prompts/

@@ -28,13 +28,13 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
         def __init__(self, model_checkpoint, revision=None, seed=None, log_level=None):
             pass
 
-        def generate(self, texts, unified_audio_prompt, unified_transcript_prompt):
+        def generate(self, texts, audio_prompts=None):
             # Create mock AudioSegment objects for each text
-            from pydub import AudioSegment
             import numpy as np
+            from pydub import AudioSegment
 
             audio_segments = []
-            for text in texts:
+            for _text in texts:
                 # Create minimal audio data (0.1 seconds of silence)
                 frames = int(0.1 * 22050)
                 data = np.zeros(frames, dtype=np.int16)
@@ -110,7 +110,11 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
         # Mock successful worker script output
         class MockResult:
             returncode = 0
-            stdout = '{"speaker_id": "S2", "audio_path": "/tmp/synthetic_prompts/S2_seed_00012345.wav", "stdout_transcript": "[S2] Test synthetic prompt  [S1]"}'
+            stdout = (
+                '{"speaker_id": "S2", "audio_path": "/tmp/synthetic_prompts/'
+                'S2_seed_00012345.wav", "stdout_transcript": "[S2] Test synthetic '
+                'prompt  [S1]"}'
+            )
             stderr = ""
 
         return MockResult()
@@ -120,7 +124,10 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
     # Mock config to prevent synthetic prompt generation from creating real folders
     with (
         patch("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", False),
-        patch("src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR", os.path.join(tmp_path, "synthetic_prompts")),
+        patch(
+            "src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR",
+            os.path.join(tmp_path, "synthetic_prompts"),
+        ),
     ):
         # Run the pipeline
         run_pipeline(str(transcript_path), str(output_path))

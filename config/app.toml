@@ -37,8 +37,8 @@ avg_wps = 2.5
 max_new_tokens_cap = 1600
 # Optionally define a seed for specific voice pair and genation characteristics
 # seed = 12345
-# Whether to generate synthetic voice prompts for unprompted speakers
-generate_synthetic_prompts = true
+# Whether to generate synthetic voice prompts for unprompted speakers (default: True)
+generate_synthetic_prompts = false
 
 [tags]
 verbal_tags = [

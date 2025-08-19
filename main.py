@@ -21,6 +21,8 @@ Requirements / notes:
 import argparse
 import logging
 import os
+from pathlib import Path
+from typing import Dict, Optional
 
 from pydub import AudioSegment
 from shared.logging import setup_logger
@@ -119,6 +121,40 @@ def validate_file_exists(file_path: str, file_description: str) -> bool:
     return True
 
 
+def process_speaker_prompts(
+    prompts_dict: Dict, speaker_id: str, voice_path: str, transcript_path: str
+) -> None:
+    """
+    Validates and processes speaker prompt files, reading the transcript content
+    and populating the prompts dictionary.
+    """
+    if not voice_path:
+        return
+
+    if not validate_file_exists(voice_path, f"Speaker {speaker_id} voice prompt file"):
+        exit(1)
+    if not validate_audio_file(voice_path):
+        logger.error(f"Speaker {speaker_id} voice prompt file failed validation.")
+        exit(1)
+
+    transcript_content = None
+    if transcript_path:
+        if not validate_file_exists(
+            transcript_path, f"Speaker {speaker_id} transcript file"
+        ):
+            exit(1)
+        try:
+            # Read the content of the transcript file
+            transcript_content = (
+                Path(transcript_path).read_text(encoding="utf-8").strip()
+            )
+        except Exception as e:
+            logger.error(f"Failed to read transcript file {transcript_path}: {e}")
+            exit(1)
+
+    prompts_dict[speaker_id] = {"path": voice_path, "transcript": transcript_content}
+
+
 # ---- CLI ----
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -129,8 +165,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "output_path",
-        nargs="?",  # This makes the positional argument optional
-        default=None,  # Provide a default value if it's not given
+        nargs="?",
+        default=None,
         help="Path to save the final MP3 audio file. (Not required for --dry-run)",
     )
     parser.add_argument(
@@ -142,7 +178,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--s1-transcript",
         type=str,
-        help="Transcript for the S1 voice prompt. Requires --s1-voice.",
+        help="Path to a transcript file for the S1 voice prompt. Requires --s1-voice.",
     )
     parser.add_argument(
         "--s2-voice", type=str, help="Path to an audio prompt file for Speaker 2."
@@ -150,7 +186,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--s2-transcript",
         type=str,
-        help="Transcript for the S2 voice prompt. Requires --s2-voice.",
+        help="Path to a transcript file for the S2 voice prompt. Requires --s2-voice.",
     )
     parser.add_argument(
         "-v",
@@ -184,30 +220,22 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Add a new validation block right after parsing
     if not args.dry_run and args.output_path is None:
         parser.error("output_path is required unless the --dry-run flag is used.")
 
-    # Determine logging level
     if args.verbosity != "WARNING":
-        # --verbosity flag takes precedence
         log_level = getattr(logging, args.verbosity)
     elif args.verbose:
-        # -v flag sets level to INFO
         log_level = logging.INFO
     else:
-        # Default level
         log_level = logging.WARNING
 
-    # Initialize logger
     setup_logger(log_level)
     logger = logging.getLogger(__name__)
 
-    # Validate input file exists
     if not validate_file_exists(args.input_path, "Input transcript file"):
         exit(1)
 
-    # Validate transcript and voice prompt combinations
     if args.s1_transcript and not args.s1_voice:
         logger.error("--s1-transcript requires --s1-voice.")
         exit(1)
@@ -215,24 +243,11 @@ if __name__ == "__main__":
         logger.error("--s2-transcript requires --s2-voice.")
         exit(1)
 
-    # Build a dictionary of voice prompts and validate them
-    voice_prompts = {}
-    if args.s1_voice:
-        if not validate_file_exists(args.s1_voice, "Speaker 1 voice prompt file"):
-            exit(1)
-        if not validate_audio_file(args.s1_voice):
-            logger.error("Speaker 1 voice prompt file failed validation.")
-            exit(1)
-        voice_prompts["S1"] = {"path": args.s1_voice, "transcript": args.s1_transcript}
-    if args.s2_voice:
-        if not validate_file_exists(args.s2_voice, "Speaker 2 voice prompt file"):
-            exit(1)
-        if not validate_audio_file(args.s2_voice):
-            logger.error("Speaker 2 voice prompt file failed validation.")
-            exit(1)
-        voice_prompts["S2"] = {"path": args.s2_voice, "transcript": args.s2_transcript}
+    # Build a dictionary of voice prompts, reading transcript content from files.
+    voice_prompts: Dict[str, Dict[str, Optional[str]]] = {}
+    process_speaker_prompts(voice_prompts, "S1", args.s1_voice, args.s1_transcript)
+    process_speaker_prompts(voice_prompts, "S2", args.s2_voice, args.s2_transcript)
 
-    # Pass the prompts to the pipeline
     try:
         run_pipeline(
             args.input_path,

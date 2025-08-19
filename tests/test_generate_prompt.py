@@ -1,9 +1,7 @@
 """Unit tests for the generate_prompt.py worker script."""
 
 import json
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -55,10 +53,7 @@ def test_generate_synthetic_prompt_basic(tmp_path):
 
         # Test generation
         result = generate_prompt.generate_synthetic_prompt(
-            speaker_id="S1",
-            seed=12345,
-            output_dir=str(tmp_path),
-            verbose=False
+            speaker_id="S1", seed=12345, output_dir=str(tmp_path), verbose=False
         )
 
         # Verify result structure
@@ -75,8 +70,8 @@ def test_generate_synthetic_prompt_basic(tmp_path):
         mock_tts.generate.assert_called_once()
 
         # Check the call arguments
-        call_args = mock_tts.generate.call_args[0]
-        texts = call_args[0]
+        call_kwargs = mock_tts.generate.call_args[1]
+        texts = call_kwargs["texts"]
         assert len(texts) == 1
         assert "[S1]" in texts[0]
         assert "[S2]" in texts[0]  # Should have continuity tag
@@ -93,16 +88,15 @@ def test_generate_synthetic_prompt_no_seed(tmp_path):
         mock_audio_segment = MagicMock()
         mock_tts.generate.return_value = [mock_audio_segment]
 
-        with patch("random.randint", return_value=98765) as mock_randint:
+        with patch(
+            "generate_prompt.get_random_seed", return_value=98765
+        ) as mock_get_random_seed:
             result = generate_prompt.generate_synthetic_prompt(
-                speaker_id="S2",
-                seed=None,
-                output_dir=str(tmp_path),
-                verbose=True
+                speaker_id="S2", seed=None, output_dir=str(tmp_path), verbose=True
             )
 
             # Should generate a temporary seed
-            mock_randint.assert_called_once()
+            mock_get_random_seed.assert_called_once()
             assert "S2_seed_00098765.wav" in result["audio_path"]
 
 
@@ -111,9 +105,7 @@ def test_generate_synthetic_prompt_tts_failure(tmp_path):
     with patch("generate_prompt.DiaTTS", side_effect=RuntimeError("TTS failed")):
         with pytest.raises(RuntimeError, match="Failed to initialize DiaTTS"):
             generate_prompt.generate_synthetic_prompt(
-                speaker_id="S1",
-                seed=12345,
-                output_dir=str(tmp_path)
+                speaker_id="S1", seed=12345, output_dir=str(tmp_path)
             )
 
 
@@ -126,9 +118,7 @@ def test_generate_synthetic_prompt_generation_failure(tmp_path):
 
         with pytest.raises(RuntimeError, match="Failed to generate audio"):
             generate_prompt.generate_synthetic_prompt(
-                speaker_id="S1",
-                seed=12345,
-                output_dir=str(tmp_path)
+                speaker_id="S1", seed=12345, output_dir=str(tmp_path)
             )
 
 
@@ -144,10 +134,7 @@ def test_transcript_formatting():
         test_text = "Line one.\nLine two with\nnewlines."
         with patch("generate_prompt.load_raw_text", return_value=test_text):
             result = generate_prompt.generate_synthetic_prompt(
-                speaker_id="S1",
-                seed=12345,
-                output_dir="/tmp",
-                verbose=False
+                speaker_id="S1", seed=12345, output_dir="/tmp", verbose=False
             )
 
             # Check that stdout transcript has newlines replaced with double spaces
@@ -157,8 +144,8 @@ def test_transcript_formatting():
             assert stdout_transcript.startswith("[S1]")
 
             # Check that generation transcript includes continuity tag
-            call_args = mock_tts.generate.call_args[0]
-            generation_text = call_args[0][0]
+            call_kwargs = mock_tts.generate.call_args[1]
+            generation_text = call_kwargs["texts"][0]
             assert generation_text.endswith("[S2]")
 
 
@@ -168,15 +155,21 @@ def test_main_function_success(tmp_path):
         mock_generate.return_value = {
             "speaker_id": "S1",
             "audio_path": str(tmp_path / "S1_seed_12345.wav"),
-            "stdout_transcript": "[S1] Test transcript"
+            "stdout_transcript": "[S1] Test transcript",
         }
 
-        with patch("sys.argv", [
-            "generate_prompt.py",
-            "--speaker-id", "S1",
-            "--seed", "12345",
-            "--output-dir", str(tmp_path)
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_prompt.py",
+                "--speaker-id",
+                "S1",
+                "--seed",
+                "12345",
+                "--output-dir",
+                str(tmp_path),
+            ],
+        ):
             with patch("builtins.print") as mock_print:
                 generate_prompt.main()
 
@@ -195,11 +188,10 @@ def test_main_function_failure(tmp_path):
     with patch("generate_prompt.generate_synthetic_prompt") as mock_generate:
         mock_generate.side_effect = RuntimeError("Generation failed")
 
-        with patch("sys.argv", [
-            "generate_prompt.py",
-            "--speaker-id", "S1",
-            "--output-dir", str(tmp_path)
-        ]):
+        with patch(
+            "sys.argv",
+            ["generate_prompt.py", "--speaker-id", "S1", "--output-dir", str(tmp_path)],
+        ):
             with pytest.raises(SystemExit, match="1"):
                 generate_prompt.main()
 
@@ -229,17 +221,23 @@ def test_cli_integration(tmp_path):
         mock_generate.return_value = {
             "speaker_id": "S1",
             "audio_path": str(tmp_path / "S1_seed_00012345.wav"),
-            "stdout_transcript": "[S1] Test transcript  [S2]"
+            "stdout_transcript": "[S1] Test transcript  [S2]",
         }
 
         # Test with all arguments including verbose
-        with patch("sys.argv", [
-            "generate_prompt.py",
-            "--speaker-id", "S1",
-            "--seed", "12345",
-            "--output-dir", str(tmp_path),
-            "--verbose"
-        ]):
+        with patch(
+            "sys.argv",
+            [
+                "generate_prompt.py",
+                "--speaker-id",
+                "S1",
+                "--seed",
+                "12345",
+                "--output-dir",
+                str(tmp_path),
+                "--verbose",
+            ],
+        ):
             with patch("builtins.print") as mock_print:
                 generate_prompt.main()
 
@@ -254,10 +252,7 @@ def test_cli_integration(tmp_path):
 
                 # Verify generate_synthetic_prompt was called with correct args
                 mock_generate.assert_called_once_with(
-                    speaker_id="S1",
-                    seed=12345,
-                    output_dir=str(tmp_path),
-                    verbose=True
+                    speaker_id="S1", seed=12345, output_dir=str(tmp_path), verbose=True
                 )
 
 
@@ -272,10 +267,7 @@ def test_file_creation(tmp_path):
         mock_tts.generate.return_value = [mock_audio_segment]
 
         result = generate_prompt.generate_synthetic_prompt(
-            speaker_id="S1",
-            seed=12345,
-            output_dir=str(tmp_path),
-            verbose=False
+            speaker_id="S1", seed=12345, output_dir=str(tmp_path), verbose=False
         )
 
         # Verify audio file export was called
