@@ -2,11 +2,12 @@ import logging
 import os
 import random
 import re
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 import torch
 from dia.model import Dia
+from pydub import AudioSegment
 from shared.config import config
 
 # Initialize logger
@@ -123,15 +124,6 @@ class DiaTTS:
         np.random.seed(seed)
         torch.manual_seed(seed)
 
-        if self.device is None:
-            msg = (
-                "Unreachable state in DiaTTS - _set_seed() called without "
-                "initializing self.device"
-            )
-            logger.error(msg)
-            raise NotImplementedError(msg)
-        torch.Generator(device=torch.device(self.device)).manual_seed(seed)
-
         torch.use_deterministic_algorithms(True)
         if self.device == "cuda" and torch.cuda.is_available():
             torch.cuda.manual_seed(seed)
@@ -147,6 +139,9 @@ class DiaTTS:
             torch.mps.manual_seed(seed)
             # Enable deterministic behavior for MPS
             os.environ["PYTORCH_MPS_DETERMINISTIC"] = "1"
+
+        if hasattr(torch.backends.mps, "allow_higher_precision_reduce"):
+            torch.backends.mps.allow_higher_precision_reduce = True
 
     def register_voice_prompts(
         self, voice_prompts: Dict[str, Dict[str, Optional[str]]]
@@ -199,66 +194,143 @@ class DiaTTS:
                 }
         logger.info("Voice prompts registered successfully.")
 
-    def text_to_audio_file(self, text: str, out_path: str) -> str:
+    def _generate_audio_segment(
+        self,
+        text: str,
+        audio_prompt_paths: Optional[List[str]] = None,
+        prepended_transcripts: str = "",
+    ) -> AudioSegment:
         """
-        Converts text to an audio file, routing to the correct generation mode.
+        Generates a single audio segment from text.
+        This is the core generation logic for a single chunk.
         """
-        logger.info(f"Generating audio for: '{text}...'")
-
-        speakers_in_block = set(re.findall(r"\[(S\d+)\]", text))
-
-        # Initialize variables for text payload and audio prompts
-        main_text_payload = text
-        prepended_transcripts = ""
-        audio_prompt_paths = []
-        contains_pure_tts = False
-
-        # Determine generation mode for each speaker in the block
-        for speaker in speakers_in_block:
-            prompt_details = self._voice_prompt_details.get(speaker)
-
-            if prompt_details:
-                path = prompt_details.get("path")
-                transcript = prompt_details.get("transcript")
-
-                # Add audio prompt path if available
-                if path and path not in audio_prompt_paths:
-                    audio_prompt_paths.append(path)
-
-                # Prepend transcript for high-fidelity cloning (Mode A)
-                if transcript:
-                    prepended_transcripts = (
-                        f"[{speaker}]{transcript}[{speaker}] {prepended_transcripts}"
-                    )
-            else:  # Mode C: Pure TTS
-                contains_pure_tts = True
-
-        # Reset seed if any speaker is pure TTS to ensure consistency
-        if contains_pure_tts and self.seed is not None:
-            logger.debug(f"Resetting seed to {self.seed} for pure TTS generation.")
-            self._set_seed(self.seed)
+        logger.info(f"Generating single audio chunk for: '{text}'...")
 
         # Assemble the final text payload
-        text_payload = prepended_transcripts + main_text_payload
+        if prepended_transcripts:
+            text_payload = prepended_transcripts + " " + text
+        else:
+            text_payload = text
 
-        # Prepare arguments for the generate call conditionally
+        # Prepare arguments for the generate call
         generate_kwargs = {
             "text": text_payload,
-            "use_torch_compile": False,
             "verbose": self.log_level in (logging.INFO, logging.DEBUG),
         }
-
-        # Add configured generation parameters
         generate_kwargs.update(config.DIA_GENERATE_PARAMS)
 
-        # Only add audio_prompt argument if we have audio prompts
         if audio_prompt_paths:
             generate_kwargs["audio_prompt"] = audio_prompt_paths
 
-        # Generate audio with the corrected keyword arguments
+        # Generate audio
         audio_output = self.model.generate(**generate_kwargs)
 
-        logger.info(f"Saving audio to {out_path}...")
-        self.model.save_audio(out_path, audio_output)
+        # Handle case where generate returns a list with one item
+        if isinstance(audio_output, list):
+            audio_output = audio_output[0]
 
-        return out_path
+        # Convert to AudioSegment
+        audio_int16 = (audio_output * 32767).astype(np.int16)
+        return AudioSegment(
+            audio_int16.tobytes(),
+            frame_rate=config.AUDIO_SAMPLING_RATE,
+            sample_width=config.AUDIO_SAMPLE_WIDTH,
+            channels=config.AUDIO_CHANNELS,
+        )
+
+    def generate(
+        self,
+        texts: List[str],
+        unified_audio_prompt: Optional[str],
+        unified_transcript_prompt: Optional[str],
+    ) -> List[AudioSegment]:
+        """
+        Converts a batch of text chunks to audio segments. If only one chunk is
+        provided, it routes to a simplified single-generation method.
+
+        Args:
+            texts: List of text chunks to convert to audio.
+            unified_audio_prompt: Path to a unified audio prompt file (optional).
+            unified_transcript_prompt: A unified transcript prompt string (optional).
+
+        Returns:
+            A list of AudioSegment objects, one for each input text chunk.
+        """
+        if not texts:
+            return []
+
+        # Reset seed for consistency if any text contains pure TTS speakers
+        contains_pure_tts = any(
+            speaker not in self._voice_prompt_details
+            for text in texts
+            for speaker in set(re.findall(r"[(S\d+)]", text))
+        )
+        if contains_pure_tts and self.seed is not None:
+            logger.debug(
+                f"Resetting seed to {self.seed} for pure TTS generation in batch"
+            )
+            self._set_seed(self.seed)
+
+        # Route to single generation if only one chunk is provided
+        if len(texts) == 1:
+            logger.info("Only one chunk detected, routing to single generation.")
+            return [
+                self._generate_audio_segment(
+                    texts[0],
+                    audio_prompt_paths=(
+                        [unified_audio_prompt] if unified_audio_prompt else None
+                    ),
+                    prepended_transcripts=unified_transcript_prompt or "",
+                )
+            ]
+
+        logger.info(f"Generating batch audio for {len(texts)} text chunks")
+        chunked_transcripts = ",\n".join([f'"{t}"' for t in texts])
+        logger.info(f"Chunked transcript:\n{chunked_transcripts}")
+
+        # Prepare text payloads
+        batch_text_payloads = [
+            (
+                (unified_transcript_prompt + " " + text)
+                if unified_transcript_prompt
+                else text
+            )
+            for text in texts
+        ]
+
+        # Prepare audio prompts
+        batch_audio_prompts = (
+            [unified_audio_prompt] * len(texts) if unified_audio_prompt else None
+        )
+
+        # Prepare arguments for the batch generate call
+        generate_kwargs = {
+            "text": batch_text_payloads,
+            "verbose": self.log_level in (logging.INFO, logging.DEBUG),
+        }
+        generate_kwargs.update(config.DIA_GENERATE_PARAMS)
+
+        if batch_audio_prompts:
+            generate_kwargs["audio_prompt"] = batch_audio_prompts
+
+        # Make single batch call to model
+        logger.info("Making batch call to Dia model...")
+        audio_outputs = self.model.generate(**generate_kwargs)
+
+        # Convert numpy arrays to AudioSegment objects
+        audio_segments = []
+        for i, audio_array in enumerate(audio_outputs):
+            audio_int16 = (audio_array * 32767).astype(np.int16)
+            audio_segment = AudioSegment(
+                audio_int16.tobytes(),
+                frame_rate=config.AUDIO_SAMPLING_RATE,
+                sample_width=config.AUDIO_SAMPLE_WIDTH,
+                channels=config.AUDIO_CHANNELS,
+            )
+            audio_segments.append(audio_segment)
+            logger.debug(
+                f"Converted audio chunk {i + 1}/{len(audio_outputs)} to AudioSegment"
+            )
+
+        logger.info(f"Successfully generated {len(audio_segments)} audio segments")
+        return audio_segments

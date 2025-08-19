@@ -47,6 +47,10 @@ bomdia input_transcript.txt output_podcast.mp3
 
 The input audio should be in WAV format. See the Dia TTS project for recommendations on best practices regarding audio (length and transcript).
 
+> **Recommendations for Voice Prompt Audio:**
+>
+> For the best voice cloning results, the total duration of all provided audio prompts should be between **5 to 10 seconds**. If you are providing prompts for multiple speakers, ensure each speaker has at least 3-5 seconds of clear audio. The model learns the voice characteristics from this audio, so high-quality, clean recordings are essential.
+
 Although not documented, and a clear recommendation is made to use transcripts in the official DiaTTS project, it is technically possible to generate voice cloning without the correspodning transcript:
 
 ```bash
