@@ -1,7 +1,4 @@
 import logging
-import os
-import random
-import re
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -103,10 +100,6 @@ class DiaTTS:
             )
             compute_dtype = torch.float32
 
-        if self.seed is not None:
-            logger.info(f"Setting seed to '{self.seed}' for voice selection")
-            self._set_seed(self.seed)
-
         # The Dia library handles device placement internally.
         # We pass the device directly during creation.
         self.model = Dia.from_pretrained(
@@ -117,31 +110,6 @@ class DiaTTS:
         self._voice_prompt_details: Dict[str, Dict[str, Optional[str]]] = {}
 
         logger.info("Model loaded successfully.")
-
-    def _set_seed(self, seed: int) -> None:
-        """Sets the random seed for reproducibility."""
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-
-        torch.use_deterministic_algorithms(True)
-        if self.device == "cuda" and torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-
-            # Ensure deterministic behavior for cuDNN (if used)
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
-
-            if os.getenv("CUBLAS_WORKSPACE_CONFIG") is None:
-                os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-        elif self.device == "mps" and torch.backends.mps.is_available():
-            torch.mps.manual_seed(seed)
-            # Enable deterministic behavior for MPS
-            os.environ["PYTORCH_MPS_DETERMINISTIC"] = "1"
-
-        if hasattr(torch.backends.mps, "allow_higher_precision_reduce"):
-            torch.backends.mps.allow_higher_precision_reduce = True
 
     def register_voice_prompts(
         self, voice_prompts: Dict[str, Dict[str, Optional[str]]]
@@ -218,6 +186,8 @@ class DiaTTS:
             "verbose": self.log_level in (logging.INFO, logging.DEBUG),
         }
         generate_kwargs.update(config.DIA_GENERATE_PARAMS)
+        if self.seed:
+            generate_kwargs["voice_seed"] = self.seed
 
         if audio_prompt_paths:
             generate_kwargs["audio_prompt"] = audio_prompt_paths
@@ -259,18 +229,6 @@ class DiaTTS:
         if not texts:
             return []
 
-        # Reset seed for consistency if any text contains pure TTS speakers
-        contains_pure_tts = any(
-            speaker not in self._voice_prompt_details
-            for text in texts
-            for speaker in set(re.findall(r"[(S\d+)]", text))
-        )
-        if contains_pure_tts and self.seed is not None:
-            logger.debug(
-                f"Resetting seed to {self.seed} for pure TTS generation in batch"
-            )
-            self._set_seed(self.seed)
-
         # Route to single generation if only one chunk is provided
         if len(texts) == 1:
             logger.info("Only one chunk detected, routing to single generation.")
@@ -309,6 +267,8 @@ class DiaTTS:
             "verbose": self.log_level in (logging.INFO, logging.DEBUG),
         }
         generate_kwargs.update(config.DIA_GENERATE_PARAMS)
+        if self.seed:
+            generate_kwargs["voice_seed"] = self.seed
 
         if batch_audio_prompts:
             generate_kwargs["audio_prompt"] = batch_audio_prompts

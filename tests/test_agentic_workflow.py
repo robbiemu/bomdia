@@ -15,6 +15,7 @@ from src.pipeline import run_pipeline
 
 
 class TestAgenticWorkflow(unittest.TestCase):
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     def test_run_pipeline_with_agentic_flow(self):
         # Create a temporary directory for our test files
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -80,6 +81,8 @@ class TestAgenticWorkflow(unittest.TestCase):
                     MockLLMInvoker,
                 ),
                 patch.dict(os.environ, {"LLM_SPEC": "openai/gpt-4o-mini"}),
+                patch("src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR", os.path.join(tmp_dir, "synthetic_prompts")),
+                patch("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", False),  # Disable synthetic prompts
             ):  # Ensure LLM is available
                 # Mock the actor's perform_moment function
                 def mock_perform_moment(
@@ -110,6 +113,7 @@ class TestAgenticWorkflow(unittest.TestCase):
             # Check if the output file was created
             self.assertTrue(os.path.exists(output_path))
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     def test_co_terminous_moment_sorting(self):
         """Test that co-terminous moments are sorted correctly by start line."""
         # Create a simple transcript
@@ -178,6 +182,7 @@ class TestAgenticWorkflow(unittest.TestCase):
 
             self.assertEqual(actual_order, expected_order)
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     def test_enhanced_logging_observability(self):
         """Test that all the enhanced logging points are working correctly."""
         # Set up logging capture
@@ -277,6 +282,7 @@ class TestAgenticWorkflow(unittest.TestCase):
             # Clean up
             logger.removeHandler(handler)
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     def test_narrative_moment_discovery(self):
         """Test that demonstrates narrative moment discovery functionality."""
         # Create a test transcript with clear narrative moments
@@ -336,7 +342,10 @@ class TestAgenticWorkflow(unittest.TestCase):
             self.assertEqual(moments[0]["end_line"], 2)
             self.assertIn("movie", moments[0]["description"].lower())
 
-    @patch("shared.config.config.MAX_TAG_RATE", 1)
+    @patch.dict(os.environ, {
+        "MAX_TAG_RATE": "1",
+        "REHEARSAL_CHECKPOINT_PATH": ":memory:"  # Use in-memory SQLite
+    })
     def test_simple_director_run(self):
         """Test a simple director run to see what's happening."""
         # Create a simple transcript
@@ -371,6 +380,10 @@ class TestAgenticWorkflow(unittest.TestCase):
             "src.components.verbal_tag_injector.director.LiteLLMInvoker",
             return_value=mock_llm_invoker,
         ):
+            import importlib
+            import shared.config
+            importlib.reload(shared.config)
+
             director = Director(transcript)
 
             # Mock the actor's perform_moment method

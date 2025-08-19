@@ -1,3 +1,4 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -31,6 +32,7 @@ def mock_llm_invoker():
     return MagicMock()
 
 
+@patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
 def test_director_initialization(sample_transcript, mock_llm_invoker):
     """Test that the Director initializes correctly."""
     with patch(
@@ -44,6 +46,7 @@ def test_director_initialization(sample_transcript, mock_llm_invoker):
         assert director.new_tag_budget >= 0  # Should have some budget
 
 
+@patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
 def test_director_initialization_with_higher_budget(
     transcript_without_placeholders, mock_llm_invoker
 ):
@@ -59,6 +62,7 @@ def test_director_initialization_with_higher_budget(
         assert director.new_tag_budget > 0  # Should have a positive budget
 
 
+@patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
 @patch("shared.config.config.MAX_TAG_RATE", 1)
 def test_run_rehearsal_basic(sample_transcript, mock_llm_invoker):
     """Test the basic run_rehearsal functionality."""
@@ -103,6 +107,7 @@ def test_run_rehearsal_basic(sample_transcript, mock_llm_invoker):
         assert final_script[1]["text"] == "A suggested line."
 
 
+@patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
 @patch("shared.config.config.MAX_TAG_RATE", 1)
 def test_run_rehearsal_with_new_tag_injection(
     transcript_without_placeholders, mock_llm_invoker
@@ -150,6 +155,7 @@ def test_run_rehearsal_with_new_tag_injection(
         assert "(laughs)" in final_script[1]["text"]
 
 
+@patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
 def test_run_rehearsal_with_new_tag_injection_and_budget(
     transcript_without_placeholders, mock_llm_invoker
 ):
@@ -218,6 +224,7 @@ def test_run_rehearsal_with_new_tag_injection_and_budget(
             assert tag_count > 0
 
 
+@patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
 @patch("shared.config.config.MAX_TAG_RATE", 1)
 @patch(
     "shared.config.config.director_agent",
@@ -303,6 +310,7 @@ class TestMomentDefinitionAndState:
     """Tests the Director's ability to define moments and the agent's
     state management."""
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     def test_director_defines_single_moment_correctly(self, mock_llm_invoker):
         """
         Verify that when the agent encounters a new line, it calls the Director,
@@ -369,6 +377,7 @@ class TestMomentDefinitionAndState:
                 assert line_num in director.line_to_moment_map
                 assert len(director.line_to_moment_map[line_num]) > 0
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     def test_moment_finalization_flag_is_set_correctly(self, mock_llm_invoker):
         """
         Verify that after a moment is fully processed and reviewed, its entry
@@ -430,6 +439,7 @@ class TestActorAndDirectorWorkflow:
     """Tests the interaction between the Actor, Director, and the
     recomposition logic."""
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     @patch("shared.config.config.MAX_TAG_RATE", 1)
     def test_actor_processes_lines_as_moment_in_one_call(self, mock_llm_invoker):
         """
@@ -499,6 +509,7 @@ class TestActorAndDirectorWorkflow:
                 assert "lines" in kwargs
                 assert len(kwargs["lines"]) == 2  # Both lines in one call
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     @patch("shared.config.config.MAX_TAG_RATE", 1)
     def test_recomposition_updates_finalized_blocks_correctly(self, mock_llm_invoker):
         """
@@ -566,6 +577,7 @@ class TestActorAndDirectorWorkflow:
 class TestSpecialHandlingAndEdgeCases:
     """Tests for the specific pivot line and error handling logic."""
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     def test_director_boundary_error_creates_fallback_moment(self, mock_llm_invoker):
         """
         Verify that nonsensical moment boundaries from the Director result in
@@ -630,6 +642,7 @@ class TestSpecialHandlingAndEdgeCases:
                 assert len(final_script) == 1
                 assert final_script[0]["text"] == "Hello there."
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     def test_script_with_no_moments_completes_gracefully(self, mock_llm_invoker):
         """
         Verify that a script with no interesting moments is processed without error.
@@ -699,6 +712,7 @@ class TestSpecialHandlingAndEdgeCases:
 class TestCoTerminousMomentHandling:
     """Tests for handling co-terminous moments."""
 
+    @patch.dict(os.environ, {"REHEARSAL_CHECKPOINT_PATH": ":memory:"})
     @patch("shared.config.config.MAX_TAG_RATE", 1)
     def test_co_terminous_moments_are_processed_once(self, mock_llm_invoker):
         """

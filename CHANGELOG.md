@@ -6,7 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.1.7]
+Of course. Here is the changelog entry for version 0.2.0, written in the style of the existing `CHANGELOG.md`.
+
+---
+
+## [0.2.0] - 2025-08-19
+
+### Added
+- **Synthetic Voice Prompt Generation**: For multi-chunk transcripts with unprompted speakers, the system now automatically generates a persistent, high-quality voice prompt (`.wav` and `.txt`) in a configurable directory to ensure consistent voice identity.
+- **Smart Prompt Ordering**: When using voice cloning, the system now intelligently orders the combined voice prompts based on the starting speaker of the transcript to comply with TTS model guidelines and improve audio quality.
+- **Standalone Worker Script**: Introduced a new `generate-prompt` command-line tool for manual or automated creation of synthetic voice prompts.
+- **New Configuration Options**: Added `[pipeline].generate_synthetic_prompts` to enable/disable the feature and `[generate_prompt].output_dir` to control where prompts are saved.
+
+### Changed
+- **Seeding Mechanism**: Refactored TTS seeding to use the model's native `voice_seed` parameter, removing global random state modifications for a more robust and predictable generation process.
+
+### Fixed
+- **Test Isolation**: Hardened the test suite to prevent filesystem artifacts during parallel execution by ensuring all stateful agent tests use an in-memory database.
+- **Audio Generation Continuity**: The post-chunking process now correctly adds a continuity speaker tag to all audio chunks, including the last one, to improve audio quality at the end of segments.
+
+## [0.1.7] 2025-08-18
 
 ### Changed
 - **Post-processes transcript chunks*** for continuity

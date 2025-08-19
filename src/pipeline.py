@@ -3,12 +3,16 @@
 This file contains the core pipeline for converting a transcript to a podcast.
 """
 
+import json
 import logging
 import os
 import random
 import re
+import subprocess  # nosec
+import sys
 import tempfile
-from typing import Dict, List, Match, Optional
+from pathlib import Path
+from typing import Dict, Optional
 
 from pydub import AudioSegment
 from shared.config import config
@@ -140,19 +144,11 @@ def run_pipeline(
                 # Strip all newlines and replace with two spaces
                 processed_chunk = chunk.replace("\n", "  ")
 
-                # Add speaker continuity tag at the end
-                # Find the last speaker in the chunk
-                last_speaker: Optional[str] = None
-                for chunk_line in reversed(chunk.split("\n")):
-                    speaker_match: Optional[Match[str]] = re.match(
-                        r"^\[(S\d+)\]", chunk_line
-                    )
-                    if speaker_match:
-                        last_speaker = speaker_match.group(1)
-                        break
-
-                # Add the appropriate speaker tag at the end
-                if last_speaker:
+                # Find the last speaker tag in the chunk
+                last_speaker_match = re.findall(r"\b(S\d+)\b", processed_chunk)
+                if last_speaker_match:
+                    last_speaker = last_speaker_match[-1]
+                    # Add the appropriate speaker tag at the end
                     if last_speaker == "S1":
                         processed_chunk += "  [S2]"
                     elif last_speaker == "S2":
@@ -168,6 +164,109 @@ def run_pipeline(
             )
         except Exception as e:
             raise RuntimeError(f"Failed to chunk transcript: {str(e)}") from e
+
+        # Synthetic Voice Prompt Generation for Unprompted Speakers
+        if voice_prompts is None:
+            voice_prompts = {}
+
+        # Identify all speakers and unprompted speakers
+        all_speakers = {ln["speaker"] for ln in lines}
+        prompted_speakers = set(voice_prompts.keys())
+        unprompted_speakers = all_speakers - prompted_speakers
+
+        # Generate synthetic prompts if conditions are met
+        if (
+            config.GENERATE_SYNTHETIC_PROMPTS
+            and unprompted_speakers
+            and len(mini_transcripts) > 1
+        ):
+            logger.info(
+                f"Generating synthetic voice prompts for unprompted speakers: "
+                f"{sorted(unprompted_speakers)}"
+            )
+
+            # Create output directory for synthetic prompts
+            output_dir = Path(config.GENERATE_PROMPT_OUTPUT_DIR)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Synthetic prompts output directory: {output_dir}")
+
+            # Generate synthetic prompts for each unprompted speaker
+            for speaker_id in sorted(unprompted_speakers):
+                logger.debug(f"Generating synthetic prompt for {speaker_id}")
+
+                try:
+                    # Build command for worker script using module execution for
+                    #  robustness
+                    cmd = [
+                        sys.executable,
+                        "-m",
+                        "generate_prompt",
+                        "--speaker-id",
+                        speaker_id,
+                        "--output-dir",
+                        str(output_dir),
+                    ]
+
+                    # Add seed if provided
+                    if seed is not None:
+                        cmd.extend(["--seed", str(seed)])
+
+                    # Add verbose flag if debug logging is enabled
+                    if logger.getEffectiveLevel() <= logging.DEBUG:
+                        cmd.append("--verbose")
+
+                    logger.debug(f"Running worker script: {' '.join(cmd)}")
+
+                    # Execute worker script
+                    result = subprocess.run(
+                        cmd, capture_output=True, text=True, check=True
+                    )  # nosec
+
+                    # Parse JSON output from worker script
+                    try:
+                        metadata = json.loads(result.stdout.strip())
+                        logger.debug(f"Worker script output: {metadata}")
+                    except json.JSONDecodeError as e:
+                        raise RuntimeError(
+                            f"Failed to parse worker script output as JSON: {e}\n"
+                            f"stdout: {result.stdout}\n"
+                            f"stderr: {result.stderr}"
+                        ) from e
+
+                    # Update voice_prompts dictionary with synthetic prompt
+                    voice_prompts[speaker_id] = {
+                        "path": metadata["audio_path"],
+                        "transcript": metadata["stdout_transcript"],
+                    }
+
+                    logger.info(
+                        f"Generated synthetic voice prompt for {speaker_id}: "
+                        f"{metadata['audio_path']}"
+                    )
+
+                except subprocess.CalledProcessError as e:
+                    logger.error(
+                        f"Worker script failed for {speaker_id}: "
+                        f"return code {e.returncode}\n"
+                        f"stdout: {e.stdout}\n"
+                        f"stderr: {e.stderr}"
+                    )
+                    raise RuntimeError(
+                        f"Failed to generate synthetic prompt for {speaker_id}"
+                    ) from e
+                except Exception as e:
+                    logger.error(
+                        f"Unexpected error generating synthetic prompt for {speaker_id}"
+                        f": {e}"
+                    )
+                    raise RuntimeError(
+                        f"Failed to generate synthetic prompt for {speaker_id}: {e}"
+                    ) from e
+
+            logger.info(
+                f"Successfully generated {len(unprompted_speakers)} synthetic "
+                "voice prompts"
+            )
 
         # Prompt Pre-computation - Combine voice prompts for batch processing
         unified_audio_prompt_path = None
@@ -186,12 +285,59 @@ def run_pipeline(
                     "Combining high-fidelity voice prompts for batch processing"
                 )
 
+                # Smart Prompt Unification: Determine speaker order based on first chunk
+                speaker_order = sorted(high_fidelity_prompts.keys())  # Default fallback
+
+                if mini_transcripts:
+                    # Inspect the first chunk to determine the starting speaker
+                    first_chunk = mini_transcripts[0]
+                    first_speaker_match = re.search(r"^\[(S\d+)\]", first_chunk.strip())
+
+                    if first_speaker_match:
+                        starting_speaker = first_speaker_match.group(1)
+                        logger.debug(
+                            f"First chunk starts with speaker: {starting_speaker}"
+                        )
+
+                        # Reorder prompts to start with the conversation's
+                        #  starting speaker
+                        available_speakers = list(high_fidelity_prompts.keys())
+                        if starting_speaker in available_speakers:
+                            # Start with the conversation starter, then add
+                            #  others in sorted order
+                            speaker_order = [starting_speaker]
+                            remaining_speakers = [
+                                s
+                                for s in sorted(available_speakers)
+                                if s != starting_speaker
+                            ]
+                            speaker_order.extend(remaining_speakers)
+                            logger.info(
+                                f"Smart prompt ordering: {speaker_order} "
+                                f"(conversation starts with {starting_speaker})"
+                            )
+                        else:
+                            logger.debug(
+                                f"Starting speaker {starting_speaker} not in "
+                                "available prompts, using sorted order"
+                            )
+                    else:
+                        logger.debug(
+                            "Could not determine starting speaker from first chunk, "
+                            "using sorted order"
+                        )
+                else:
+                    logger.debug(
+                        "No mini-transcripts available for smart ordering, using "
+                        "sorted order"
+                    )
+
                 # Initialize combined audio segment and transcript parts
                 combined_audio = None
                 transcript_parts = []
 
-                # Process prompts in sorted order for deterministic results
-                for speaker in sorted(high_fidelity_prompts.keys()):
+                # Process prompts in smart-determined order
+                for speaker in speaker_order:
                     details = high_fidelity_prompts[speaker]
                     audio_path = details["path"]
                     transcript = details["transcript"]

@@ -22,7 +22,7 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
     def test_llm_review_mode_success_path(self):
         """Test successful LLM review mode execution."""
         # Set up logging capture
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as log_file:
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as log_file:
             log_handler = logging.FileHandler(log_file.name)
             log_handler.setLevel(logging.DEBUG)
             logger = logging.getLogger("src.components.verbal_tag_injector")
@@ -80,12 +80,11 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                     return result
 
                 # Set environment variable for LLM review mode
-                with patch.dict(
-                    os.environ, {"DIRECTOR_AGENT_REVIEW_MODE": "llm"}
-                ):
+                with patch.dict(os.environ, {"DIRECTOR_AGENT_REVIEW_MODE": "llm"}):
                     # Force reload config to pick up the environment variable
                     import importlib
                     import shared.config
+
                     importlib.reload(shared.config)
                     from shared.config import config
 
@@ -97,7 +96,20 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                             "src.components.verbal_tag_injector.actor.Actor.perform_moment",
                             mock_perform_moment,
                         ):
-                            with patch("shared.config.config.MAX_TAG_RATE", 0.5):
+                            with patch.dict(
+                                os.environ,
+                                {
+                                    "MAX_TAG_RATE": "0.5",
+                                    "REHEARSAL_CHECKPOINT_PATH": ":memory:",  # Use in-memory SQLite
+                                },
+                            ):
+                                # Force reload config to pick up the environment variables
+                                import importlib
+                                import shared.config
+
+                                importlib.reload(shared.config)
+                                from shared.config import config
+
                                 # Create director and run rehearsal
                                 director = Director(self.transcript)
                                 final_script = director.run_rehearsal()
@@ -113,13 +125,17 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                                 )
 
                                 # Assert that LLM review was successful (no fallback)
-                                self.assertNotIn("falling back to procedural", log_content)
+                                self.assertNotIn(
+                                    "falling back to procedural", log_content
+                                )
 
                                 # Assert that the final script reflects Director's decisions
                                 self.assertEqual(len(final_script), 3)
                                 # Line 0 should have one tag (warmly) kept, (cheerfully) removed
                                 self.assertIn("(warmly)", final_script[0]["text"])
-                                self.assertNotIn("(cheerfully)", final_script[0]["text"])
+                                self.assertNotIn(
+                                    "(cheerfully)", final_script[0]["text"]
+                                )
                                 # Line 1 should have no tags (reverted to original)
                                 self.assertEqual(
                                     final_script[1]["text"],
@@ -135,7 +151,7 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
     def test_llm_review_mode_fallback_to_procedural(self):
         """Test LLM review mode fallback to procedural when LLM fails."""
         # Set up logging capture
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as log_file:
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as log_file:
             log_handler = logging.FileHandler(log_file.name)
             log_handler.setLevel(logging.DEBUG)
             logger = logging.getLogger("src.components.verbal_tag_injector")
@@ -179,7 +195,9 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                         text = line["text"]
                         # Add more tags than budget allows to test procedural fallback
                         if line_number == 0:
-                            text = "Hello there (warmly) (cheerfully) (enthusiastically)."
+                            text = (
+                                "Hello there (warmly) (cheerfully) (enthusiastically)."
+                            )
                         elif line_number == 1:
                             text = "Hi! How are you doing today? (smiling) (brightly)"
                         result[line_number] = {
@@ -190,12 +208,11 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                     return result
 
                 # Set environment variable for LLM review mode
-                with patch.dict(
-                    os.environ, {"DIRECTOR_AGENT_REVIEW_MODE": "llm"}
-                ):
+                with patch.dict(os.environ, {"DIRECTOR_AGENT_REVIEW_MODE": "llm"}):
                     # Force reload config to pick up the environment variable
                     import importlib
                     import shared.config
+
                     importlib.reload(shared.config)
                     from shared.config import config
 
@@ -207,7 +224,20 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                             "src.components.verbal_tag_injector.actor.Actor.perform_moment",
                             mock_perform_moment,
                         ):
-                            with patch("shared.config.config.MAX_TAG_RATE", 0.5):
+                            with patch.dict(
+                                os.environ,
+                                {
+                                    "MAX_TAG_RATE": "0.5",
+                                    "REHEARSAL_CHECKPOINT_PATH": ":memory:",  # Use in-memory SQLite
+                                },
+                            ):
+                                # Force reload config to pick up the environment variables
+                                import importlib
+                                import shared.config
+
+                                importlib.reload(shared.config)
+                                from shared.config import config
+
                                 # Create director and run rehearsal
                                 director = Director(self.transcript)
                                 final_script = director.run_rehearsal()
@@ -223,9 +253,7 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                                 )
 
                                 # Assert that fallback occurred
-                                self.assertIn(
-                                    "LLM review failed", log_content
-                                )
+                                self.assertIn("LLM review failed", log_content)
                                 self.assertIn(
                                     "falling back to procedural review", log_content
                                 )
@@ -252,7 +280,9 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
 
                                 # Final should have more than original but less than what
                                 # Actor would have added (due to procedural pruning)
-                                self.assertGreater(total_final_tags, total_original_tags)
+                                self.assertGreater(
+                                    total_final_tags, total_original_tags
+                                )
 
             finally:
                 # Clean up
@@ -270,7 +300,7 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
         ]
 
         # Set up logging capture
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as log_file:
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as log_file:
             log_handler = logging.FileHandler(log_file.name)
             log_handler.setLevel(logging.DEBUG)
             logger = logging.getLogger("src.components.verbal_tag_injector")
@@ -296,7 +326,9 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                 mock_llm_invoker.invoke.side_effect = [
                     mock_global_summary,
                     mock_moment_definition,
-                    Exception("Network error during LLM call"),  # Director review failure
+                    Exception(
+                        "Network error during LLM call"
+                    ),  # Director review failure
                 ]
 
                 # Mock the actor to add some tags
@@ -318,10 +350,18 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                     return result
 
                 # Force LLM review mode and run
-                with patch.dict(os.environ, {"DIRECTOR_AGENT_REVIEW_MODE": "llm"}):
-                    # Force reload config to pick up the environment variable
+                with patch.dict(
+                    os.environ,
+                    {
+                        "DIRECTOR_AGENT_REVIEW_MODE": "llm",
+                        "MAX_TAG_RATE": "1.0",
+                        "REHEARSAL_CHECKPOINT_PATH": ":memory:",  # Use in-memory SQLite
+                    },
+                ):
+                    # Force reload config to pick up the environment variables
                     import importlib
                     import shared.config
+
                     importlib.reload(shared.config)
                     from shared.config import config
 
@@ -333,33 +373,30 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                             "src.components.verbal_tag_injector.actor.Actor.perform_moment",
                             mock_perform_moment,
                         ):
-                            with patch("shared.config.config.MAX_TAG_RATE", 1.0):  # Higher budget
-                                # Create director and run rehearsal
-                                director = Director(simple_transcript)
-                                final_script = director.run_rehearsal()
+                            # Create director and run rehearsal
+                            director = Director(simple_transcript)
+                            final_script = director.run_rehearsal()
 
-                                # Read the log file to check for expected messages
-                                log_file.seek(0)
-                                log_content = log_file.read()
+                            # Read the log file to check for expected messages
+                            log_file.seek(0)
+                            log_content = log_file.read()
 
-                                # Assert that LLM mode was attempted first
-                                self.assertIn(
-                                    "Director's Final Cut: Using 'llm' review mode",
-                                    log_content,
-                                )
+                            # Assert that LLM mode was attempted first
+                            self.assertIn(
+                                "Director's Final Cut: Using 'llm' review mode",
+                                log_content,
+                            )
 
-                                # Assert that fallback occurred due to exception
-                                self.assertIn(
-                                    "LLM review failed", log_content
-                                )
-                                self.assertIn(
-                                    "falling back to procedural review", log_content
-                                )
+                            # Assert that fallback occurred due to exception
+                            self.assertIn("LLM review failed", log_content)
+                            self.assertIn(
+                                "falling back to procedural review", log_content
+                            )
 
-                                # Assert that the pipeline didn't crash
-                                self.assertEqual(len(final_script), 2)
-                                self.assertEqual(final_script[0]["speaker"], "S1")
-                                self.assertEqual(final_script[1]["speaker"], "S2")
+                            # Assert that the pipeline didn't crash
+                            self.assertEqual(len(final_script), 2)
+                            self.assertEqual(final_script[0]["speaker"], "S1")
+                            self.assertEqual(final_script[1]["speaker"], "S2")
 
             finally:
                 # Clean up

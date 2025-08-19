@@ -37,6 +37,8 @@ avg_wps = 2.5
 max_new_tokens_cap = 1600
 # Optionally define a seed for specific voice pair and genation characteristics
 # seed = 12345
+# Whether to generate synthetic voice prompts for unprompted speakers
+generate_synthetic_prompts = true
 
 [tags]
 verbal_tags = [
@@ -84,6 +86,11 @@ mode = "llm"
 
 [persistence]
 rehearsal_checkpoint_path = "rehearsal_checkpoints.sqlite"
+
+# Configuration for synthetic voice prompt generation
+[generate_prompt]
+# Directory where synthetic voice prompts are saved
+output_dir = "synthetic_prompts"
 
 [audio]
 output_format = "mp3"
