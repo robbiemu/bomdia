@@ -1,10 +1,10 @@
 """Coverage tests for the audio generator TTS module."""
 
-import numpy as np
 from unittest.mock import MagicMock, patch
 
-from src.components.audio_generator.tts import DiaTTS
+import numpy as np
 from pydub import AudioSegment
+from src.components.audio_generator.tts import DiaTTS
 
 
 def test_diatts_init():
@@ -29,7 +29,9 @@ def test_diatts_generate_single():
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
             mock_dia.from_pretrained.return_value = mock_model
-            mock_model.generate.return_value = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+            mock_model.generate.return_value = np.array(
+                [0.1, 0.2, 0.3], dtype=np.float32
+            )
 
             with patch("src.components.audio_generator.tts.config") as mock_config:
                 mock_config.DIA_GENERATE_PARAMS = {}
@@ -41,9 +43,7 @@ def test_diatts_generate_single():
 
                 # Test generate method
                 with patch("builtins.print"):  # Suppress print statements
-                    result = tts.generate(
-                        ["Hello world"], None, None
-                    )
+                    result = tts.generate(texts=["Hello world"], audio_prompts=None)
 
                 # Verify the methods were called
                 mock_model.generate.assert_called()
@@ -66,7 +66,12 @@ def test_diatts_register_voice_prompts():
 
             # Test register_voice_prompts method
             with patch("builtins.print"):  # Suppress print statements
-                tts.register_voice_prompts({"S1": {"path": "path1", "transcript": None}, "S2": {"path": "path2", "transcript": None}})
+                tts.register_voice_prompts(
+                    {
+                        "S1": {"path": "path1", "transcript": None},
+                        "S2": {"path": "path2", "transcript": None},
+                    }
+                )
 
             # Verify the method was called
             mock_model.generate_speaker_embedding.assert_called()
@@ -85,7 +90,9 @@ def test_diatts_register_voice_prompts_hifi():
 
             # Test register_voice_prompts method
             with patch("builtins.print"):  # Suppress print statements
-                tts.register_voice_prompts({"S1": {"path": "path1", "transcript": "transcript1"}})
+                tts.register_voice_prompts(
+                    {"S1": {"path": "path1", "transcript": "transcript1"}}
+                )
 
             # Verify the method was called
             mock_model.generate_speaker_embedding.assert_not_called()
@@ -96,6 +103,7 @@ def test_diatts_register_voice_prompts_hifi():
 def test_diatts_generate_hifi():
     """Test the generate method for high-fidelity cloning."""
     import logging
+
     # Set logging level to INFO to trigger verbose=True
     logging.getLogger().setLevel(logging.INFO)
 
@@ -104,7 +112,9 @@ def test_diatts_generate_hifi():
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
             mock_dia.from_pretrained.return_value = mock_model
-            mock_model.generate.return_value = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+            mock_model.generate.return_value = np.array(
+                [0.1, 0.2, 0.3], dtype=np.float32
+            )
 
             with patch("src.components.audio_generator.tts.config") as mock_config:
                 mock_config.DIA_GENERATE_PARAMS = {
@@ -120,28 +130,31 @@ def test_diatts_generate_hifi():
                 mock_config.AUDIO_CHANNELS = 1
 
                 tts = DiaTTS(seed=12345, log_level=logging.INFO)
-                tts.register_voice_prompts({"S1": {"path": "path1", "transcript": "transcript1"}})
+                tts.register_voice_prompts(
+                    {"S1": {"path": "path1", "transcript": "transcript1"}}
+                )
 
                 # Test generate method
                 with patch("builtins.print"):  # Suppress print statements
-                    tts.generate(["[S1] Hello world"], "path1", "[S1]transcript1[S1]")
+                    tts.generate(texts=["[S1] Hello world"], audio_prompts=["path1"])
 
                 # Verify the methods were called with all expected parameters
                 call_args, call_kwargs = mock_model.generate.call_args
-                assert call_kwargs['text'] == '[S1]transcript1[S1] [S1] Hello world'
-                assert call_kwargs['audio_prompt'] == ['path1']
-                assert call_kwargs['verbose'] == True
-                assert call_kwargs['max_tokens'] == 3072
-                assert call_kwargs['cfg_scale'] == 3.0
-                assert call_kwargs['temperature'] == 1.2
-                assert call_kwargs['top_p'] == 0.95
-                assert call_kwargs['cfg_filter_top_k'] == 45
-                assert call_kwargs['use_cfg_filter'] == False
+                assert call_kwargs["text"] == "[S1] Hello world"
+                assert call_kwargs["audio_prompt"] == ["path1"]
+                assert call_kwargs["verbose"]
+                assert call_kwargs["max_tokens"] == 3072
+                assert call_kwargs["cfg_scale"] == 3.0
+                assert call_kwargs["temperature"] == 1.2
+                assert call_kwargs["top_p"] == 0.95
+                assert call_kwargs["cfg_filter_top_k"] == 45
+                assert not call_kwargs["use_cfg_filter"]
 
 
 def test_diatts_generate_mixed_modes():
     """Test the generate method for mixed cloning modes."""
     import logging
+
     # Set logging level to INFO to trigger verbose=True
     logging.getLogger().setLevel(logging.INFO)
 
@@ -151,7 +164,9 @@ def test_diatts_generate_mixed_modes():
             mock_model = MagicMock()
             mock_dia.from_pretrained.return_value = mock_model
             mock_model.generate_speaker_embedding.return_value = ["embedding2"]
-            mock_model.generate.return_value = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+            mock_model.generate.return_value = np.array(
+                [0.1, 0.2, 0.3], dtype=np.float32
+            )
 
             with patch("src.components.audio_generator.tts.config") as mock_config:
                 mock_config.DIA_GENERATE_PARAMS = {
@@ -167,24 +182,29 @@ def test_diatts_generate_mixed_modes():
                 mock_config.AUDIO_CHANNELS = 1
 
                 tts = DiaTTS(seed=12345, log_level=logging.INFO)
-                tts.register_voice_prompts({
-                    "S1": {"path": "path1", "transcript": "transcript1"},
-                    "S2": {"path": "path2"}
-                })
+                tts.register_voice_prompts(
+                    {
+                        "S1": {"path": "path1", "transcript": "transcript1"},
+                        "S2": {"path": "path2"},
+                    }
+                )
 
                 with patch("builtins.print"):  # Suppress print statements
-                    tts.generate(["[S1] Hello [S2] world"], "path1", "[S1]transcript1[S1]")
+                    tts.generate(
+                        texts=["[S1] Hello [S2] world"], audio_prompts=["path1"]
+                    )
 
                 # Verify generate was called with correct arguments
                 call_args, call_kwargs = mock_model.generate.call_args
-                assert call_kwargs['text'] == '[S1]transcript1[S1] [S1] Hello [S2] world'
-                assert call_kwargs['verbose'] == True
-                assert call_kwargs['max_tokens'] == 3072
-                assert call_kwargs['cfg_scale'] == 3.0
-                assert call_kwargs['temperature'] == 1.2
-                assert call_kwargs['top_p'] == 0.95
-                assert call_kwargs['cfg_filter_top_k'] == 45
-                assert call_kwargs['use_cfg_filter'] == False
+                assert call_kwargs["text"] == "[S1] Hello [S2] world"
+                assert call_kwargs["verbose"]
+                assert call_kwargs["max_tokens"] == 3072
+                assert call_kwargs["cfg_scale"] == 3.0
+                assert call_kwargs["temperature"] == 1.2
+                assert call_kwargs["top_p"] == 0.95
+                assert call_kwargs["cfg_filter_top_k"] == 45
+                assert not call_kwargs["use_cfg_filter"]
+
 
 def test_diatts_generate_pure_tts():
     """Test the generate method for pure TTS."""
@@ -193,7 +213,9 @@ def test_diatts_generate_pure_tts():
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
             mock_dia.from_pretrained.return_value = mock_model
-            mock_model.generate.return_value = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+            mock_model.generate.return_value = np.array(
+                [0.1, 0.2, 0.3], dtype=np.float32
+            )
 
             with patch("src.components.audio_generator.tts.config") as mock_config:
                 mock_config.DIA_GENERATE_PARAMS = {}
@@ -205,7 +227,9 @@ def test_diatts_generate_pure_tts():
 
                 # Test generate method
                 with patch("builtins.print"):  # Suppress print statements
-                    result = tts.generate(["[S1] Hello world"], None, None)
+                    result = tts.generate(
+                        texts=["[S1] Hello world"], audio_prompts=None
+                    )
 
                 # Verify voice_seed is passed to model.generate
                 call_args, call_kwargs = mock_model.generate.call_args
@@ -236,7 +260,7 @@ def test_diatts_voice_seed_parameter():
 
                 # Test that voice_seed is passed when seed is provided
                 tts = DiaTTS(seed=54321)
-                tts.generate(["[S1] Hello world"], None, None)
+                tts.generate(texts=["[S1] Hello world"], audio_prompts=None)
 
                 # Verify voice_seed parameter was passed to model.generate
                 call_args, call_kwargs = mock_model.generate.call_args
@@ -275,11 +299,14 @@ def test_diatts_generate_batch():
                 # Test generate method
                 texts = ["[S1] Hello world", "[S2] How are you?"]
                 unified_audio_prompt = "/path/to/unified.wav"
-                unified_transcript_prompt = "[S1]Sample transcript[S1] [S2]Another sample[S2]"
+                unified_transcript_prompt = (
+                    "[S1]Sample transcript[S1] [S2]Another sample[S2]"
+                )
 
                 with patch("builtins.print"):  # Suppress print statements
                     audio_segments = tts.generate(
-                        texts, unified_audio_prompt, unified_transcript_prompt
+                        texts=texts,
+                        audio_prompts=[unified_audio_prompt, unified_audio_prompt],
                     )
 
                 # Verify the model was called with correct arguments
@@ -287,8 +314,8 @@ def test_diatts_generate_batch():
 
                 # Check batch text payloads include unified transcript prompt
                 expected_text_payloads = [
-                    f"{unified_transcript_prompt} [S1] Hello world",
-                    f"{unified_transcript_prompt} [S2] How are you?",
+                    "[S1] Hello world",
+                    "[S2] How are you?",
                 ]
                 assert call_kwargs["text"] == expected_text_payloads
 
@@ -297,16 +324,16 @@ def test_diatts_generate_batch():
                 assert call_kwargs["audio_prompt"] == expected_audio_prompts
 
                 # Check other parameters
-                assert call_kwargs['max_tokens'] == 3072
-                assert call_kwargs['cfg_scale'] == 3.0
+                assert call_kwargs["max_tokens"] == 3072
+                assert call_kwargs["cfg_scale"] == 3.0
 
                 # Verify returned audio segments
                 assert len(audio_segments) == 2
                 # Each segment should be a pydub AudioSegment
                 for segment in audio_segments:
-                    assert hasattr(segment, 'frame_rate')
-                    assert hasattr(segment, 'channels')
-                    assert hasattr(segment, 'sample_width')
+                    assert hasattr(segment, "frame_rate")
+                    assert hasattr(segment, "channels")
+                    assert hasattr(segment, "sample_width")
 
 
 def test_diatts_generate_no_prompts():
@@ -336,7 +363,7 @@ def test_diatts_generate_no_prompts():
                 texts = ["[S1] Hello world"]
 
                 with patch("builtins.print"):  # Suppress print statements
-                    audio_segments = tts.generate(texts, None, None)
+                    audio_segments = tts.generate(texts=texts, audio_prompts=None)
 
                 # Verify the model was called with correct arguments
                 call_args, call_kwargs = mock_model.generate.call_args
@@ -378,7 +405,7 @@ def test_diatts_generate_voice_seed_consistency():
                 texts = ["[S3] Hello world"]
 
                 with patch("builtins.print"):  # Suppress print statements
-                    tts.generate(texts, None, None)
+                    tts.generate(texts=texts, audio_prompts=None)
 
                 # Verify voice_seed was passed to model.generate
                 call_args, call_kwargs = mock_model.generate.call_args
@@ -396,7 +423,7 @@ def test_diatts_generate_empty_input():
             tts = DiaTTS(seed=12345)
 
             # Test with empty list of texts
-            audio_segments = tts.generate([], None, None)
+            audio_segments = tts.generate(texts=[], audio_prompts=None)
 
             # Verify no call was made to the model
             mock_model.generate.assert_not_called()

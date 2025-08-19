@@ -1,9 +1,5 @@
 """Test to verify network isolation in the test suite."""
 
-import pytest
-import socket
-from unittest.mock import patch
-
 
 def test_network_isolation():
     """

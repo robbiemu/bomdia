@@ -1,7 +1,8 @@
 """Configuration file for pytest."""
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 @pytest.fixture(autouse=True)

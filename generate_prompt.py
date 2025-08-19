@@ -10,10 +10,12 @@ doesn't affect the main generation process.
 import argparse
 import json
 import logging
-import random
 import sys
 from pathlib import Path
 from typing import Optional
+
+import torch
+from dia.model import _get_default_device
 
 # Add project root to Python path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -47,6 +49,18 @@ def get_opposite_speaker(speaker_id: str) -> str:
     else:
         # For speakers beyond S1/S2, use S1 as default opposite
         return "S1"
+
+
+def get_random_seed() -> int:
+    device = str(_get_default_device())
+    cpu_seed = torch.default_generator.initial_seed()
+    if device == "mps":
+        torch.mps.manual_seed(cpu_seed)
+        return cpu_seed
+    elif device == "cuda":
+        return torch.cuda.default_generators[0].initial_seed()
+    else:  # if device == 'cpu':
+        return cpu_seed
 
 
 def load_raw_text() -> str:
@@ -113,9 +127,8 @@ def generate_synthetic_prompt(
     # Determine generation seed
     generation_seed = seed
     if generation_seed is None:
-        # Generate temporary seed for this worker
-        generation_seed = random.randint(0, 2**32 - 1)  # nosec
-        logger.debug(f"Generated temporary seed: {generation_seed}")
+        generation_seed = get_random_seed()  # nosec
+        logger.debug(f"Torch device initial seed: {generation_seed}")
     else:
         logger.debug(f"Using provided seed: {generation_seed}")
 
@@ -144,7 +157,7 @@ def generate_synthetic_prompt(
     # Generate audio using batch processing (single item)
     try:
         logger.debug("Generating audio with DiaTTS...")
-        audio_segments = tts.generate([generation_transcript], None, None)
+        audio_segments = tts.generate(texts=[generation_transcript], audio_prompts=None)
 
         if not audio_segments:
             raise RuntimeError("No audio segments generated")

@@ -83,10 +83,10 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                 with patch.dict(os.environ, {"DIRECTOR_AGENT_REVIEW_MODE": "llm"}):
                     # Force reload config to pick up the environment variable
                     import importlib
+
                     import shared.config
 
                     importlib.reload(shared.config)
-                    from shared.config import config
 
                     with patch(
                         "src.components.verbal_tag_injector.director.LiteLLMInvoker",
@@ -100,15 +100,16 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                                 os.environ,
                                 {
                                     "MAX_TAG_RATE": "0.5",
-                                    "REHEARSAL_CHECKPOINT_PATH": ":memory:",  # Use in-memory SQLite
+                                    "REHEARSAL_CHECKPOINT_PATH": ":memory:",
                                 },
                             ):
-                                # Force reload config to pick up the environment variables
+                                # Force reload config to pick up the environment
+                                #  variables
                                 import importlib
+
                                 import shared.config
 
                                 importlib.reload(shared.config)
-                                from shared.config import config
 
                                 # Create director and run rehearsal
                                 director = Director(self.transcript)
@@ -129,9 +130,11 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                                     "falling back to procedural", log_content
                                 )
 
-                                # Assert that the final script reflects Director's decisions
+                                # Assert that the final script reflects
+                                #  Director's decisions
                                 self.assertEqual(len(final_script), 3)
-                                # Line 0 should have one tag (warmly) kept, (cheerfully) removed
+                                # Line 0 should have one tag (warmly) kept,
+                                #  (cheerfully) removed
                                 self.assertIn("(warmly)", final_script[0]["text"])
                                 self.assertNotIn(
                                     "(cheerfully)", final_script[0]["text"]
@@ -159,7 +162,8 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
             logger.setLevel(logging.DEBUG)
 
             try:
-                # Mock the LLM invoker with proper responses, but make director review fail
+                # Mock the LLM invoker with proper responses, but make director
+                #  review fail
                 mock_llm_invoker = MagicMock()
 
                 # Global summary response
@@ -211,10 +215,10 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                 with patch.dict(os.environ, {"DIRECTOR_AGENT_REVIEW_MODE": "llm"}):
                     # Force reload config to pick up the environment variable
                     import importlib
+
                     import shared.config
 
                     importlib.reload(shared.config)
-                    from shared.config import config
 
                     with patch(
                         "src.components.verbal_tag_injector.director.LiteLLMInvoker",
@@ -228,15 +232,16 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                                 os.environ,
                                 {
                                     "MAX_TAG_RATE": "0.5",
-                                    "REHEARSAL_CHECKPOINT_PATH": ":memory:",  # Use in-memory SQLite
+                                    "REHEARSAL_CHECKPOINT_PATH": ":memory:",
                                 },
                             ):
-                                # Force reload config to pick up the environment variables
+                                # Force reload config to pick up the environment
+                                #  variables
                                 import importlib
+
                                 import shared.config
 
                                 importlib.reload(shared.config)
-                                from shared.config import config
 
                                 # Create director and run rehearsal
                                 director = Director(self.transcript)
@@ -278,7 +283,8 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                                     for line in final_script
                                 )
 
-                                # Final should have more than original but less than what
+                                # Final should have more than original but less
+                                #  than what
                                 # Actor would have added (due to procedural pruning)
                                 self.assertGreater(
                                     total_final_tags, total_original_tags
@@ -308,7 +314,8 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
             logger.setLevel(logging.DEBUG)
 
             try:
-                # Mock the LLM invoker - 3 calls: global summary, moment definition, director review
+                # Mock the LLM invoker - 3 calls: global summary, moment
+                #  definition, director review
                 mock_llm_invoker = MagicMock()
 
                 mock_global_summary = MagicMock()
@@ -360,10 +367,10 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                 ):
                     # Force reload config to pick up the environment variables
                     import importlib
+
                     import shared.config
 
                     importlib.reload(shared.config)
-                    from shared.config import config
 
                     with patch(
                         "src.components.verbal_tag_injector.director.LiteLLMInvoker",
