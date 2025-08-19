@@ -27,21 +27,27 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
         def __init__(self, model_checkpoint, revision=None, seed=None, log_level=None):
             pass
 
-        def text_to_audio_file(self, text, path):
-            # Create a dummy wav file with proper WAV format
-            import wave
-
+        def generate(self, texts, unified_audio_prompt, unified_transcript_prompt):
+            # Create mock AudioSegment objects for each text
+            from pydub import AudioSegment
             import numpy as np
 
-            # Create a simple WAV file with minimal content
-            with wave.open(path, "wb") as wav_file:
-                wav_file.setnchannels(1)  # Mono
-                wav_file.setsampwidth(2)  # 16-bit
-                wav_file.setframerate(22050)  # Sample rate
+            audio_segments = []
+            for text in texts:
                 # Create minimal audio data (0.1 seconds of silence)
                 frames = int(0.1 * 22050)
                 data = np.zeros(frames, dtype=np.int16)
-                wav_file.writeframes(data.tobytes())
+
+                # Create AudioSegment from raw bytes
+                segment = AudioSegment(
+                    data.tobytes(),
+                    frame_rate=22050,
+                    sample_width=2,  # 16-bit = 2 bytes
+                    channels=1       # Mono
+                )
+                audio_segments.append(segment)
+
+            return audio_segments
 
         def register_voice_prompts(self, voice_prompts):
             pass
@@ -123,21 +129,27 @@ def test_main_pipeline_integration_seeding(tmp_path, monkeypatch):
         def __init__(self, model_checkpoint, revision=None, seed=None, log_level=None):
             self.seed = seed
 
-        def text_to_audio_file(self, text, path):
-            # Create a dummy wav file with proper WAV format
-            import wave
-
+        def generate(self, texts, unified_audio_prompt, unified_transcript_prompt):
+            # Create mock AudioSegment objects for each text
+            from pydub import AudioSegment
             import numpy as np
 
-            # Create a simple WAV file with minimal content
-            with wave.open(path, "wb") as wav_file:
-                wav_file.setnchannels(1)  # Mono
-                wav_file.setsampwidth(2)  # 16-bit
-                wav_file.setframerate(22050)  # Sample rate
+            audio_segments = []
+            for text in texts:
                 # Create minimal audio data (0.1 seconds of silence)
                 frames = int(0.1 * 22050)
                 data = np.zeros(frames, dtype=np.int16)
-                wav_file.writeframes(data.tobytes())
+
+                # Create AudioSegment from raw bytes
+                segment = AudioSegment(
+                    data.tobytes(),
+                    frame_rate=22050,
+                    sample_width=2,  # 16-bit = 2 bytes
+                    channels=1       # Mono
+                )
+                audio_segments.append(segment)
+
+            return audio_segments
 
         def register_voice_prompts(self, voice_prompts):
             pass

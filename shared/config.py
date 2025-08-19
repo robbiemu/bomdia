@@ -2,8 +2,9 @@
 
 import os
 from pathlib import Path
+from typing import Optional
 
-import tomli  # For reading TOML files
+import tomli
 
 
 class Config:
@@ -56,6 +57,30 @@ class Config:
             "dia_generate_params", {}
         )
 
+        # Audio settings
+        self.AUDIO_OUTPUT_FORMAT = os.environ.get(
+            "AUDIO_OUTPUT_FORMAT",
+            self._file_config.get("audio", {}).get("output_format", "mp3"),
+        )
+        self.AUDIO_SAMPLING_RATE = int(
+            os.environ.get(
+                "AUDIO_SAMPLING_RATE",
+                self._file_config.get("audio", {}).get("sampling_rate", "44100"),
+            )
+        )
+        self.AUDIO_SAMPLE_WIDTH = int(
+            os.environ.get(
+                "AUDIO_SAMPLE_WIDTH",
+                self._file_config.get("audio", {}).get("sample_width", "2"),
+            )
+        )
+        self.AUDIO_CHANNELS = int(
+            os.environ.get(
+                "AUDIO_CHANNELS",
+                self._file_config.get("audio", {}).get("channels", "1"),
+            )
+        )
+
         # Pipeline behavior constants
         self.CONTEXT_WINDOW = int(
             os.environ.get(
@@ -80,19 +105,15 @@ class Config:
                 "AVG_WPS", self._file_config.get("pipeline", {}).get("avg_wps", "2.5")
             )
         )
-        self.MAX_NEW_TOKENS_CAP = int(
-            os.environ.get(
-                "MAX_NEW_TOKENS_CAP",
-                self._file_config.get("pipeline", {}).get("max_new_tokens_cap", "1600"),
-            )
-        )
 
         seed = os.environ.get(
             "SEED",
             self._file_config.get("pipeline", {}).get("seed", None),
         )
         if seed is not None:
-            self.SEED = int(seed)
+            self.SEED: Optional[int] = int(seed)
+        else:
+            self.SEED = None
 
         # Verbal tags and line combiners (from file only, as these are lists)
         self.VERBAL_TAGS = self._file_config.get("tags", {}).get(

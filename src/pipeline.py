@@ -6,9 +6,9 @@ This file contains the core pipeline for converting a transcript to a podcast.
 import logging
 import os
 import random
-import shutil
+import re
 import tempfile
-from typing import Dict, Optional
+from typing import Dict, List, Match, Optional
 
 from pydub import AudioSegment
 from shared.config import config
@@ -89,8 +89,6 @@ def run_pipeline(
                     break
 
             # Check speaker tags strictly match S<number> format
-            import re
-
             for line in lines:
                 if not re.match(r"^S\d+$", line["speaker"]):
                     validation_errors.append(
@@ -135,6 +133,35 @@ def run_pipeline(
                 raise ValueError(
                     "No mini-transcripts generated from the input"
                 ) from None
+
+            # Post-process chunks: strip newlines and add speaker continuity tags
+            processed_mini_transcripts = []
+            for chunk in mini_transcripts:
+                # Strip all newlines and replace with two spaces
+                processed_chunk = chunk.replace("\n", "  ")
+
+                # Add speaker continuity tag at the end
+                # Find the last speaker in the chunk
+                last_speaker: Optional[str] = None
+                for chunk_line in reversed(chunk.split("\n")):
+                    speaker_match: Optional[Match[str]] = re.match(
+                        r"^\[(S\d+)\]", chunk_line
+                    )
+                    if speaker_match:
+                        last_speaker = speaker_match.group(1)
+                        break
+
+                # Add the appropriate speaker tag at the end
+                if last_speaker:
+                    if last_speaker == "S1":
+                        processed_chunk += "  [S2]"
+                    elif last_speaker == "S2":
+                        processed_chunk += "  [S1]"
+
+                processed_mini_transcripts.append(processed_chunk)
+
+            mini_transcripts = processed_mini_transcripts
+
             logger.info(
                 f"Produced {len(mini_transcripts)} mini-transcript blocks "
                 f"(5-10s preferred)."
@@ -142,20 +169,89 @@ def run_pipeline(
         except Exception as e:
             raise RuntimeError(f"Failed to chunk transcript: {str(e)}") from e
 
+        # Prompt Pre-computation - Combine voice prompts for batch processing
+        unified_audio_prompt_path = None
+        unified_transcript_prompt = None
+
+        if voice_prompts:
+            # Check if we have any high-fidelity prompts (with both path and transcript)
+            high_fidelity_prompts = {
+                speaker: details
+                for speaker, details in voice_prompts.items()
+                if details and details.get("path") and details.get("transcript")
+            }
+
+            if high_fidelity_prompts:
+                logger.info(
+                    "Combining high-fidelity voice prompts for batch processing"
+                )
+
+                # Initialize combined audio segment and transcript parts
+                combined_audio = None
+                transcript_parts = []
+
+                # Process prompts in sorted order for deterministic results
+                for speaker in sorted(high_fidelity_prompts.keys()):
+                    details = high_fidelity_prompts[speaker]
+                    audio_path = details["path"]
+                    transcript = details["transcript"]
+
+                    # Load and combine audio
+                    try:
+                        speaker_audio = AudioSegment.from_file(audio_path)
+                        if combined_audio is None:
+                            combined_audio = speaker_audio
+                        else:
+                            combined_audio += speaker_audio
+
+                        # Format transcript with speaker tags
+                        formatted_transcript = f"[{speaker}]{transcript}[{speaker}]"
+                        transcript_parts.append(formatted_transcript)
+
+                        logger.debug(f"Added {speaker} prompt: {audio_path}")
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to load audio prompt for {speaker}: {str(e)}"
+                        )
+
+                if combined_audio and transcript_parts:
+                    # Create unified transcript prompt
+                    unified_transcript_prompt = " ".join(transcript_parts)
+
+                    # Create temporary file for combined audio
+                    with tempfile.NamedTemporaryFile(suffix=".wav") as temp_audio_file:
+                        unified_audio_prompt_path = temp_audio_file.name
+
+                    # Export combined audio to temporary file
+                    combined_audio.export(unified_audio_prompt_path, format="wav")
+
+                    logger.info(
+                        f"Created unified audio prompt: {unified_audio_prompt_path}"
+                    )
+                    logger.info(
+                        "Created unified transcript prompt: "
+                        f"{unified_transcript_prompt}"
+                    )
+
         # Mandatory seeding for multi-block pure TTS
         all_speakers = {ln["speaker"] for ln in lines}
         prompted_speakers = set(voice_prompts.keys()) if voice_prompts else set()
         unprompted_speakers = all_speakers - prompted_speakers
 
-        if unprompted_speakers and len(mini_transcripts) > 1 and seed is None:
-            # Generate a secure random seed if one is required but not provided
-            seed = random.randint(0, 2**32 - 1)  # nosec B311
-            logger.debug(
-                "No seed provided for consistent voice generation; using "
-                f"auto-generated seed: {seed}"
-            )
+        if unprompted_speakers and len(mini_transcripts) > 1:
+            # The Dia model automatically compiles functions for performance, but
+            #  compiled functions can retain internal state that doesn't get reset
+            config.DIA_GENERATE_PARAMS["use_torch_compile"] = False
 
-        # TTS each block with Dia
+            if seed is None:
+                # Generate a secure random seed if one is required but not provided
+                seed = random.randint(0, 2**32 - 1)  # nosec B311
+                logger.debug(
+                    "No seed provided for consistent voice generation; using "
+                    f"auto-generated seed: {seed}"
+                )
+
+        # TTS generation with Dia using batch processing
         try:
             # Get the current logger level for the TTS
             log_level = logger.getEffectiveLevel()
@@ -166,28 +262,24 @@ def run_pipeline(
             if voice_prompts:
                 tts.register_voice_prompts(voice_prompts)
 
-            tmp_dir = tempfile.mkdtemp(prefix="dia_mvp_")
-            seg_paths = []
-
             try:
-                for i, block in enumerate(mini_transcripts):
-                    out_wav = os.path.join(tmp_dir, f"block_{i:04d}.wav")
-                    logger.info(
-                        f"Generating block {i + 1}/{len(mini_transcripts)} -> "
-                        f"{out_wav} ..."
-                    )
-                    tts.text_to_audio_file(block, out_wav)
-                    seg_paths.append(out_wav)
+                # Use batch processing for all mini-transcripts in a single call
+                logger.info("Generating audio using batch processing...")
+                audio_segments = tts.generate(
+                    mini_transcripts,
+                    unified_audio_prompt_path,
+                    unified_transcript_prompt,
+                )
 
-                # Concatenate with pydub
+                # Concatenate AudioSegment objects directly
                 logger.info("Concatenating audio segments ...")
                 combined = None
-                for p in seg_paths:
-                    seg = AudioSegment.from_wav(p)
+                for i, segment in enumerate(audio_segments):
+                    logger.debug(f"Concatenating segment {i + 1}/{len(audio_segments)}")
                     if combined is None:
-                        combined = seg
+                        combined = segment
                     else:
-                        combined += seg
+                        combined += segment
 
                 # Export final mp3 (or wav)
                 if combined is None:
@@ -197,13 +289,23 @@ def run_pipeline(
                 os.makedirs(os.path.dirname(out_audio_path) or ".", exist_ok=True)
 
                 logger.info(f"Exporting final to {out_audio_path} ...")
-                combined.export(out_audio_path, format="mp3")
+                combined.export(out_audio_path, format=config.AUDIO_OUTPUT_FORMAT)
                 logger.info("Done.")
             except Exception as e:
                 raise RuntimeError(f"Failed during TTS generation: {str(e)}") from e
             finally:
-                # Cleanup
-                shutil.rmtree(tmp_dir, ignore_errors=True)
+                # Cleanup temporary unified audio prompt file
+                if unified_audio_prompt_path and os.path.exists(
+                    unified_audio_prompt_path
+                ):
+                    try:
+                        os.remove(unified_audio_prompt_path)
+                        logger.debug(
+                            "Cleaned up temporary audio file: "
+                            f"{unified_audio_prompt_path}"
+                        )
+                    except OSError as e:
+                        logger.warning(f"Failed to clean up temporary audio file: {e}")
 
         except Exception as e:
             raise RuntimeError(f"Failed to initialize TTS: {str(e)}") from e

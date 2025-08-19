@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.7]
+
+### Changed
+- **Post-processes transcript chunks*** for continuity
+- **Conversion to Batch mode processing** Making use of the batch mode processing provided by Dia's generate() method.
+
+### Fixed
+- **Dead clode cleanup** Some code and configuration that was unused has been removed entirely.
+
 ## [0.1.6] - 2025-08-16
 
 ### Added

@@ -1,8 +1,10 @@
 """Coverage tests for the audio generator TTS module."""
 
+import numpy as np
 from unittest.mock import MagicMock, patch
 
 from src.components.audio_generator.tts import DiaTTS
+from pydub import AudioSegment
 
 
 def test_diatts_init():
@@ -20,26 +22,32 @@ def test_diatts_init():
             assert tts is not None
 
 
-def test_diatts_text_to_audio_file():
-    """Test the text_to_audio_file method."""
+def test_diatts_generate_single():
+    """Test the generate method for a single chunk."""
     with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
             mock_dia.from_pretrained.return_value = mock_model
+            mock_model.generate.return_value = np.array([0.1, 0.2, 0.3], dtype=np.float32)
 
-            tts = DiaTTS(seed=12345)
+            with patch("src.components.audio_generator.tts.config") as mock_config:
+                mock_config.DIA_GENERATE_PARAMS = {}
+                mock_config.AUDIO_SAMPLING_RATE = 22050
+                mock_config.AUDIO_SAMPLE_WIDTH = 2
+                mock_config.AUDIO_CHANNELS = 1
 
-            # Test text_to_audio_file method
-            with patch("builtins.print"):  # Suppress print statements
-                result = tts.text_to_audio_file(
-                    "Hello world", "/tmp/test.wav"
-                )  # nosec B108
+                tts = DiaTTS(seed=12345)
 
-            # Verify the methods were called
-            mock_model.generate.assert_called()
-            mock_model.save_audio.assert_called()
-            assert result == "/tmp/test.wav"  # nosec B108
+                # Test generate method
+                with patch("builtins.print"):  # Suppress print statements
+                    result = tts.generate(
+                        ["Hello world"], None, None
+                    )
+
+                # Verify the methods were called
+                mock_model.generate.assert_called()
+                assert isinstance(result[0], AudioSegment)
 
 
 def test_diatts_register_voice_prompts():
@@ -85,8 +93,8 @@ def test_diatts_register_voice_prompts_hifi():
             assert tts._voice_prompt_details["S1"]["transcript"] == "transcript1"
 
 
-def test_diatts_text_to_audio_file_hifi():
-    """Test the text_to_audio_file method for high-fidelity cloning."""
+def test_diatts_generate_hifi():
+    """Test the generate method for high-fidelity cloning."""
     import logging
     # Set logging level to INFO to trigger verbose=True
     logging.getLogger().setLevel(logging.INFO)
@@ -96,6 +104,7 @@ def test_diatts_text_to_audio_file_hifi():
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
             mock_dia.from_pretrained.return_value = mock_model
+            mock_model.generate.return_value = np.array([0.1, 0.2, 0.3], dtype=np.float32)
 
             with patch("src.components.audio_generator.tts.config") as mock_config:
                 mock_config.DIA_GENERATE_PARAMS = {
@@ -106,19 +115,21 @@ def test_diatts_text_to_audio_file_hifi():
                     "cfg_filter_top_k": 45,
                     "use_cfg_filter": False,
                 }
+                mock_config.AUDIO_SAMPLING_RATE = 22050
+                mock_config.AUDIO_SAMPLE_WIDTH = 2
+                mock_config.AUDIO_CHANNELS = 1
 
                 tts = DiaTTS(seed=12345, log_level=logging.INFO)
                 tts.register_voice_prompts({"S1": {"path": "path1", "transcript": "transcript1"}})
 
-                # Test text_to_audio_file method
+                # Test generate method
                 with patch("builtins.print"):  # Suppress print statements
-                    tts.text_to_audio_file("[S1] Hello world", "/tmp/test.wav")  # nosec B108
+                    tts.generate(["[S1] Hello world"], "path1", "[S1]transcript1[S1]")
 
                 # Verify the methods were called with all expected parameters
                 call_args, call_kwargs = mock_model.generate.call_args
                 assert call_kwargs['text'] == '[S1]transcript1[S1] [S1] Hello world'
                 assert call_kwargs['audio_prompt'] == ['path1']
-                assert call_kwargs['use_torch_compile'] == False
                 assert call_kwargs['verbose'] == True
                 assert call_kwargs['max_tokens'] == 3072
                 assert call_kwargs['cfg_scale'] == 3.0
@@ -128,8 +139,8 @@ def test_diatts_text_to_audio_file_hifi():
                 assert call_kwargs['use_cfg_filter'] == False
 
 
-def test_diatts_text_to_audio_file_mixed_modes():
-    """Test the text_to_audio_file method for mixed cloning modes."""
+def test_diatts_generate_mixed_modes():
+    """Test the generate method for mixed cloning modes."""
     import logging
     # Set logging level to INFO to trigger verbose=True
     logging.getLogger().setLevel(logging.INFO)
@@ -140,6 +151,7 @@ def test_diatts_text_to_audio_file_mixed_modes():
             mock_model = MagicMock()
             mock_dia.from_pretrained.return_value = mock_model
             mock_model.generate_speaker_embedding.return_value = ["embedding2"]
+            mock_model.generate.return_value = np.array([0.1, 0.2, 0.3], dtype=np.float32)
 
             with patch("src.components.audio_generator.tts.config") as mock_config:
                 mock_config.DIA_GENERATE_PARAMS = {
@@ -150,6 +162,9 @@ def test_diatts_text_to_audio_file_mixed_modes():
                     "cfg_filter_top_k": 45,
                     "use_cfg_filter": False,
                 }
+                mock_config.AUDIO_SAMPLING_RATE = 22050
+                mock_config.AUDIO_SAMPLE_WIDTH = 2
+                mock_config.AUDIO_CHANNELS = 1
 
                 tts = DiaTTS(seed=12345, log_level=logging.INFO)
                 tts.register_voice_prompts({
@@ -158,12 +173,11 @@ def test_diatts_text_to_audio_file_mixed_modes():
                 })
 
                 with patch("builtins.print"):  # Suppress print statements
-                    tts.text_to_audio_file("[S1] Hello [S2] world", "/tmp/test.wav")  # nosec B108
+                    tts.generate(["[S1] Hello [S2] world"], "path1", "[S1]transcript1[S1]")
 
                 # Verify generate was called with correct arguments
                 call_args, call_kwargs = mock_model.generate.call_args
                 assert call_kwargs['text'] == '[S1]transcript1[S1] [S1] Hello [S2] world'
-                assert call_kwargs['use_torch_compile'] == False
                 assert call_kwargs['verbose'] == True
                 assert call_kwargs['max_tokens'] == 3072
                 assert call_kwargs['cfg_scale'] == 3.0
@@ -172,23 +186,30 @@ def test_diatts_text_to_audio_file_mixed_modes():
                 assert call_kwargs['cfg_filter_top_k'] == 45
                 assert call_kwargs['use_cfg_filter'] == False
 
-def test_diatts_text_to_audio_file_pure_tts():
-    """Test the text_to_audio_file method for pure TTS."""
+def test_diatts_generate_pure_tts():
+    """Test the generate method for pure TTS."""
     with patch("src.components.audio_generator.tts._get_device") as mock_device:
         mock_device.return_value = MagicMock(type="cpu")
         with patch("src.components.audio_generator.tts.Dia") as mock_dia:
             mock_model = MagicMock()
             mock_dia.from_pretrained.return_value = mock_model
+            mock_model.generate.return_value = np.array([0.1, 0.2, 0.3], dtype=np.float32)
 
-            tts = DiaTTS(seed=12345)
+            with patch("src.components.audio_generator.tts.config") as mock_config:
+                mock_config.DIA_GENERATE_PARAMS = {}
+                mock_config.AUDIO_SAMPLING_RATE = 22050
+                mock_config.AUDIO_SAMPLE_WIDTH = 2
+                mock_config.AUDIO_CHANNELS = 1
 
-            with patch.object(tts, '_set_seed') as mock_set_seed:
-                # Test text_to_audio_file method
-                with patch("builtins.print"):  # Suppress print statements
-                    tts.text_to_audio_file("[S1] Hello world", "/tmp/test.wav")  # nosec B108
+                tts = DiaTTS(seed=12345)
 
-                # Verify the methods were called
-                mock_set_seed.assert_called_with(12345)
+                with patch.object(tts, '_set_seed') as mock_set_seed:
+                    # Test generate method
+                    with patch("builtins.print"):  # Suppress print statements
+                        tts.generate(["[S1] Hello world"], None, None)
+
+                    # Verify the methods were called
+                    mock_set_seed.assert_called_with(12345)
 
 
 def test_diatts_set_seed():
@@ -214,3 +235,166 @@ def test_diatts_set_seed():
                 mock_random.assert_called_with(54321)
                 mock_numpy.assert_called_with(54321)
                 mock_torch.assert_called_with(54321)
+
+
+def test_diatts_generate_batch():
+    """Test the generate method for batch processing."""
+    import numpy as np
+
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
+        mock_device.return_value = MagicMock(type="cpu")
+        with patch("src.components.audio_generator.tts.Dia") as mock_dia:
+            mock_model = MagicMock()
+            mock_dia.from_pretrained.return_value = mock_model
+            mock_model.sampling_rate = 22050
+
+            # Mock batch audio outputs (list of numpy arrays)
+            mock_audio_outputs = [
+                np.array([0.1, 0.2, 0.3], dtype=np.float32),
+                np.array([0.4, 0.5, 0.6], dtype=np.float32),
+            ]
+            mock_model.generate.return_value = mock_audio_outputs
+
+            with patch("src.components.audio_generator.tts.config") as mock_config:
+                mock_config.DIA_GENERATE_PARAMS = {
+                    "max_tokens": 3072,
+                    "cfg_scale": 3.0,
+                }
+                mock_config.AUDIO_SAMPLING_RATE = 22050
+                mock_config.AUDIO_SAMPLE_WIDTH = 2
+                mock_config.AUDIO_CHANNELS = 1
+
+                tts = DiaTTS(seed=12345)
+
+                # Test generate method
+                texts = ["[S1] Hello world", "[S2] How are you?"]
+                unified_audio_prompt = "/path/to/unified.wav"
+                unified_transcript_prompt = "[S1]Sample transcript[S1] [S2]Another sample[S2]"
+
+                with patch("builtins.print"):  # Suppress print statements
+                    audio_segments = tts.generate(
+                        texts, unified_audio_prompt, unified_transcript_prompt
+                    )
+
+                # Verify the model was called with correct arguments
+                call_args, call_kwargs = mock_model.generate.call_args
+
+                # Check batch text payloads include unified transcript prompt
+                expected_text_payloads = [
+                    f"{unified_transcript_prompt} [S1] Hello world",
+                    f"{unified_transcript_prompt} [S2] How are you?",
+                ]
+                assert call_kwargs["text"] == expected_text_payloads
+
+                # Check batch audio prompts
+                expected_audio_prompts = [unified_audio_prompt, unified_audio_prompt]
+                assert call_kwargs["audio_prompt"] == expected_audio_prompts
+
+                # Check other parameters
+                assert call_kwargs['max_tokens'] == 3072
+                assert call_kwargs['cfg_scale'] == 3.0
+
+                # Verify returned audio segments
+                assert len(audio_segments) == 2
+                # Each segment should be a pydub AudioSegment
+                for segment in audio_segments:
+                    assert hasattr(segment, 'frame_rate')
+                    assert hasattr(segment, 'channels')
+                    assert hasattr(segment, 'sample_width')
+
+
+def test_diatts_generate_no_prompts():
+    """Test generate method with no unified prompts."""
+    import numpy as np
+
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
+        mock_device.return_value = MagicMock(type="cpu")
+        with patch("src.components.audio_generator.tts.Dia") as mock_dia:
+            mock_model = MagicMock()
+            mock_dia.from_pretrained.return_value = mock_model
+            mock_model.sampling_rate = 22050
+
+            # Mock batch audio outputs
+            mock_audio_outputs = np.array([0.1, 0.2], dtype=np.float32)
+            mock_model.generate.return_value = mock_audio_outputs
+
+            with patch("src.components.audio_generator.tts.config") as mock_config:
+                mock_config.DIA_GENERATE_PARAMS = {}
+                mock_config.AUDIO_SAMPLING_RATE = 22050
+                mock_config.AUDIO_SAMPLE_WIDTH = 2
+                mock_config.AUDIO_CHANNELS = 1
+
+                tts = DiaTTS(seed=12345)
+
+                # Test generate method without prompts
+                texts = ["[S1] Hello world"]
+
+                with patch("builtins.print"):  # Suppress print statements
+                    audio_segments = tts.generate(texts, None, None)
+
+                # Verify the model was called with correct arguments
+                call_args, call_kwargs = mock_model.generate.call_args
+
+                # Check text payloads are unmodified
+                assert call_kwargs["text"] == texts[0]
+
+                # Check no audio prompt is passed
+                assert "audio_prompt" not in call_kwargs
+
+                # Verify returned audio segments
+                assert len(audio_segments) == 1
+
+
+def test_diatts_generate_pure_tts_seeding():
+    """Test generate method with pure TTS seeding."""
+    import numpy as np
+
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
+        mock_device.return_value = MagicMock(type="cpu")
+        with patch("src.components.audio_generator.tts.Dia") as mock_dia:
+            mock_model = MagicMock()
+            mock_dia.from_pretrained.return_value = mock_model
+            mock_model.sampling_rate = 22050
+
+            # Mock batch audio outputs
+            mock_audio_outputs = np.array([0.1, 0.2], dtype=np.float32)
+            mock_model.generate.return_value = mock_audio_outputs
+
+            with patch("src.components.audio_generator.tts.config") as mock_config:
+                mock_config.DIA_GENERATE_PARAMS = {}
+                mock_config.AUDIO_SAMPLING_RATE = 22050
+                mock_config.AUDIO_SAMPLE_WIDTH = 2
+                mock_config.AUDIO_CHANNELS = 1
+
+                tts = DiaTTS(seed=12345)
+
+                # Mock _set_seed to verify it's called for pure TTS
+                with patch.object(tts, '_set_seed') as mock_set_seed:
+                    # Test with text that has speaker not in voice prompts (pure TTS)
+                    texts = ["[S3] Hello world"]  # S3 not in voice prompts
+
+                    with patch("builtins.print"):  # Suppress print statements
+                        tts.generate(texts, None, None)
+
+                    # Verify seed was reset for pure TTS generation
+                    mock_set_seed.assert_called_with(12345)
+
+
+def test_diatts_generate_empty_input():
+    """Test generate method with empty input list."""
+    with patch("src.components.audio_generator.tts._get_device") as mock_device:
+        mock_device.return_value = MagicMock(type="cpu")
+        with patch("src.components.audio_generator.tts.Dia") as mock_dia:
+            mock_model = MagicMock()
+            mock_dia.from_pretrained.return_value = mock_model
+
+            tts = DiaTTS(seed=12345)
+
+            # Test with empty list of texts
+            audio_segments = tts.generate([], None, None)
+
+            # Verify no call was made to the model
+            mock_model.generate.assert_not_called()
+
+            # Verify an empty list is returned
+            assert audio_segments == []
