@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bomdia"
-version = "0.1.6"
+version = "0.2.0"
 description = "Add your description here"
 authors = [{name = "Gemini", email = "gemini@google.com"}]
 license = {text = "MIT"}
