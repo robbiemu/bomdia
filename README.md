@@ -10,6 +10,7 @@ Bom Dia is a tool that converts text transcripts into podcast-style audio files 
 - Uses AI models for intelligent tag placement
 - Employs an agentic workflow with Director and Actor agents for sophisticated tag injection
 - Provider-agnostic LLM support through LiteLLM (OpenAI, Ollama, Anthropic, Google Gemini, etc.)
+- Automatic synthetic voice prompt generation for improved speaker consistency
 
 ## Installation
 
@@ -35,6 +36,7 @@ bomdia input_transcript.txt output_podcast.mp3
 The application supports different voice generation modes for each voice, including:
 
 -  **High-Fidelity Cloning**: Provide both an audio prompt and its matching transcript for the most accurate voice cloning
+-  **Synthetic Voice Prompts**: Automatically generate voice prompts for speakers without provided audio using AI-generated speech
 -  **Consistent Pure TTS**: No voice prompt provided, system generates a consistent voice automatically
 
 ```bash
@@ -68,6 +70,48 @@ bomdia --seed 12345 input_transcript.txt output_podcast.mp3
 ```
 
 If not provided, the application will generate a secure random seed and log it for reproducibility.
+
+### Synthetic Voice Prompt Generation
+
+When speakers in your transcript don't have provided voice prompts, Bom Dia can automatically generate synthetic voice prompts to improve voice consistency across the generated podcast. This feature creates short audio samples for each unprompted speaker using AI-generated speech.
+
+#### Configuration
+
+Synthetic voice prompt generation can be controlled through the configuration file `config/app.toml`:
+
+```toml
+[pipeline]
+# Enable or disable synthetic voice prompt generation
+generate_synthetic_voice_prompts = true  # default: true
+```
+
+#### How It Works
+
+1. **Detection**: The system identifies speakers without provided voice prompts
+2. **Generation**: Creates a short synthetic audio sample using predefined text content
+3. **Integration**: Uses these synthetic prompts during the main audio generation process
+4. **Consistency**: Ensures all speakers have voice references for better consistency
+
+#### Standalone Worker Script
+
+Bom Dia includes a standalone worker script for generating synthetic voice prompts:
+
+```bash
+# Generate a synthetic voice prompt for speaker S1 with a specific seed
+generate-prompt --speaker-id S1 --seed 12345 --output-dir ./prompts/
+
+# Generate with a random seed (printed to stderr)
+generate-prompt --speaker-id S2 --output-dir ./prompts/
+```
+
+The worker script outputs JSON metadata to stdout and saves audio/transcript files to the specified directory.
+
+#### Benefits
+
+- **Improved Consistency**: Provides voice references for all speakers
+- **Automatic Workflow**: Seamlessly integrates into the main pipeline
+- **Reproducible Results**: Uses seeded generation for consistent output
+- **Flexible Configuration**: Can be disabled if not needed
 
 ### Verbosity Control
 
