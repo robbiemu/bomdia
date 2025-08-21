@@ -44,29 +44,44 @@ bomdia --verbosity DEBUG input.txt output.mp3  # DEBUG level
 bomdia input.txt output.mp3
 ```
 
-## LangSmith Tracing
+## LangSmith Tracing (Optional)
 
-For developers and advanced users, the application includes optional LangSmith tracing integration.
+For developers and advanced users, the application includes optional integration with [LangSmith](https://smith.langchain.com/) for detailed tracing. This allows you to visualize the entire agentic workflow, inspect the inputs and outputs of every LLM call, and monitor performance.
 
 ### Benefits
 
-- **Detailed LLM Tracing**: Track all LLM calls and their inputs/outputs
-- **Agent Workflow Visualization**: See the Director-Actor workflow execution
-- **Performance Monitoring**: Monitor execution time and resource usage
-- **No Configuration Required**: Enabled purely through environment variables
+- **Detailed LLM Tracing**: Track all LLM calls, including the exact prompts and raw responses.
+- **Agent Workflow Visualization**: See the Director-Actor workflow and agentic state transitions.
+- **Performance Monitoring**: Monitor execution time and resource usage for each step.
+- **Opt-In**: The feature is completely optional and adds no overhead if not installed.
+
+### Installation (Optional)
+
+To enable LangSmith tracing, you must first install the necessary optional dependency:
+
+```bash
+# Install the main application and the extra 'tracing' package
+uv pip install -e .[tracing]
+````
 
 ### Activation
 
 LangSmith tracing is activated by setting environment variables:
 
 ```bash
-export LANGCHAIN_TRACING_V2=true
-export LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
-export LANGCHAIN_API_KEY=your-langsmith-api-key
-export LANGCHAIN_PROJECT=your-project-name
+export LANGSMITH_TRACING=true
+export LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+export LANGSMITH_API_KEY=your-langsmith-api-key
+export LANGSMITH_PROJECT=your-project-name
 ```
 
-When these variables are not set, the application runs normally without any tracing overhead.
+If these variables are not set, or if the `tracing` package is not installed, the application runs normally without any tracing overhead.
+
+### How It Works
+
+The integration is achieved using a `@traceable` decorator on the core `LiteLLMInvoker` class. This decorator is imported from the `langsmith` library.
+
+To ensure the application runs correctly even if `langsmith` is not installed, the code uses a `try...except ImportError` block. If the import fails, a dummy decorator is created in its place that does nothing. This makes the tracing functionality a completely self-contained, opt-in feature.
 
 ## Architecture
 

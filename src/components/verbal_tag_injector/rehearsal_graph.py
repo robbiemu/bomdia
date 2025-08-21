@@ -57,7 +57,8 @@ def _format_script_for_log(lines: List[Any]) -> str:
     formatted_lines = []
     for line in lines:
         if isinstance(line, dict) and "speaker" in line and "text" in line:
-            formatted_lines.append(f"[{line['speaker']}] {line['text']}")
+            speaker = line.get("speaker_name") or line["speaker"]
+            formatted_lines.append(f"[{speaker}] {line['text']}")
         elif isinstance(line, tuple) and len(line) == 2:
             # Handle (line_num, text) tuples
             formatted_lines.append(f"Line {line[0]}: {line[1]}")
@@ -153,15 +154,25 @@ def build_rehearsal_graph(
             logger.debug(f"Using existing global summary: {state.global_summary}")
             return {}
 
-        transcript_text = "\n".join(
-            [f"[{line['speaker']}] {line['text']}" for line in state.original_lines]
-        )
+        original_script_lines = []
+        for line in state.original_lines:
+            speaker = line.get("speaker_name") or line["speaker"]
+            original_script_lines.append(f"[{speaker}] {line['text']}")
+        transcript_text = "\n".join(original_script_lines)
 
         prompt = DIRECTOR_AGENT_CONFIG["global_summary_prompt"].format(
             transcript_text=transcript_text
         )
 
-        messages = [{"role": "user", "content": prompt}]
+        system_prompt = DIRECTOR_AGENT_CONFIG.get("system_prompt", "")
+        messages = (
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+            if system_prompt
+            else [{"role": "user", "content": prompt}]
+        )
         response = director.llm_invoker.invoke(messages)
         summary = response.content
 
@@ -247,9 +258,15 @@ def build_rehearsal_graph(
 
         # Build actor script from finalized lines using the moment's line range
         actor_script = []
+        sample_name = ""
         for line_num in range(primary["start_line"], primary["end_line"] + 1):
             if 0 <= line_num < len(state.finalized_lines):
                 actor_script.append(state.finalized_lines[line_num])
+            if line_num == primary["start_line"]:
+                sample_name = (
+                    state.finalized_lines[line_num].get("speaker_name")
+                    or state.finalized_lines[line_num]["speaker"]
+                )
 
         # Build constraints (pivot line handling)
         constraints = {}
@@ -280,9 +297,6 @@ def build_rehearsal_graph(
             "tag_burst_allowance"
         ]
         moment_token_budget = min(available_tokens, max_tags_per_moment)
-
-        # Check global budget
-        from shared.config import config
 
         new_tag_budget = math.floor(len(state.original_lines) * config.MAX_TAG_RATE)
         global_tags_used = compute_global_tags_used(state)
@@ -320,6 +334,7 @@ def build_rehearsal_graph(
             token_budget=moment_token_budget,
             constraints=constraints,
             global_summary=state.global_summary,
+            sample_name=sample_name,
         )
 
         # Log the Actor's take
@@ -338,10 +353,8 @@ def build_rehearsal_graph(
     def compute_tag_budget_for_review(state: RehearsalStateModel) -> int:
         """Compute strict per-moment tag budget for Director's review."""
         # Calculate global budget constraints
-        from shared.config import config as shared_config
-
         global_budget_total = math.floor(
-            len(state.original_lines) * shared_config.MAX_TAG_RATE
+            len(state.original_lines) * config.MAX_TAG_RATE
         )
         global_used_so_far = compute_global_tags_used(state)
         remaining_global_budget = max(0, global_budget_total - global_used_so_far)
@@ -357,7 +370,7 @@ def build_rehearsal_graph(
         moment_bucket_available = token_bucket.get_available_tokens()
 
         # Apply constraints
-        max_tags_per_moment = shared_config.director_agent["rate_control"][
+        max_tags_per_moment = config.director_agent["rate_control"][
             "tag_burst_allowance"
         ]
         tag_budget_for_review = min(
@@ -365,6 +378,41 @@ def build_rehearsal_graph(
         )
 
         return int(tag_budget_for_review)
+
+    # Add this new helper function
+
+    def _check_for_review_changes(
+        performed_take: Dict[int, str], final_take: Dict[int, str]
+    ) -> bool:
+        """
+        Compares the Actor's performance with the Director's final cut to see if
+        any textual changes were made, ignoring speaker tags for a robust comparison.
+
+        Args:
+            performed_take: Dict mapping line number to the Actor's performed text.
+            final_take: Dict mapping line number to the Director's final text.
+
+        Returns:
+            True if there is a difference, False otherwise.
+        """
+        # First, check if the set of lines being reviewed is different.
+        if performed_take.keys() != final_take.keys():
+            return True
+
+        # Compare line by line, normalizing both sides to remove speaker tags.
+        for line_num, final_text in final_take.items():
+            performed_text = performed_take.get(
+                line_num, ""
+            )  # Safely get the original text
+
+            # Normalize both strings by stripping speaker tags and whitespace
+            norm_final = re.sub(r"^\[S\d+\]\s*", "", final_text).strip()
+            norm_performed = re.sub(r"^\[S\d+\]\s*", "", performed_text).strip()
+
+            if norm_final != norm_performed:
+                return True  # A change was found
+
+        return False  # No changes were found
 
     @log_node("procedural_review")
     def procedural_review_node(state: RehearsalStateModel) -> Dict[str, Any]:
@@ -432,7 +480,7 @@ def build_rehearsal_graph(
         )
 
         # Conditionally log at INFO level only if changes were made
-        changes_made = final_by_line != performed_by_line
+        changes_made = _check_for_review_changes(performed_by_line, final_by_line)
         if changes_made:
             formatted_lines = []
             for line_num in sorted(final_by_line.keys()):
@@ -474,22 +522,26 @@ def build_rehearsal_graph(
             for line_num in range(start_line, end_line + 1):
                 if 0 <= line_num < len(state.original_lines):
                     line = state.original_lines[line_num]
-                    original_script_lines.append(f"[{line['speaker']}] {line['text']}")
+                    speaker = line.get("speaker_name") or line["speaker"]
+                    original_script_lines.append(
+                        f"line_{line_num}: [{speaker}] {line['text']}"
+                    )
             original_script_text = "\n".join(original_script_lines)
 
             # Actor's performance text for this moment
             actor_performance_lines = []
+            sample_name = None
             for line_num in range(start_line, end_line + 1):
                 if line_num in actor_take["result"]:
                     line = actor_take["result"][line_num]
-                    actor_performance_lines.append(
-                        f"[{line['speaker']}] {line['text']}"
-                    )
+                    speaker = line.get("speaker_name") or line["speaker"]
+                    if start_line == line_num:
+                        sample_name = speaker
+                    actor_performance_lines.append(f"[{speaker}] {line['text']}")
                 elif 0 <= line_num < len(state.original_lines):
                     line = state.original_lines[line_num]
-                    actor_performance_lines.append(
-                        f"[{line['speaker']}] {line['text']}"
-                    )
+                    speaker = line.get("speaker_name") or line["speaker"]
+                    actor_performance_lines.append(f"[{speaker}] {line['text']}")
             actor_performance_text = "\n".join(actor_performance_lines)
 
             # Previous moment context (simplified for now)
@@ -511,10 +563,19 @@ def build_rehearsal_graph(
                 tag_budget=tag_budget_for_review,
                 start_line=start_line,
                 start_line_plus_1=start_line + 1,
+                sample_name=sample_name,
             )
 
-            # Invoke LLM
-            messages = [{"role": "user", "content": prompt}]
+            # Invoke LLM with system prompt
+            system_prompt = DIRECTOR_AGENT_CONFIG.get("system_prompt", "")
+            messages = (
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ]
+                if system_prompt
+                else [{"role": "user", "content": prompt}]
+            )
             response = director.llm_invoker.invoke(messages)
 
             # Parse JSON response
@@ -526,31 +587,43 @@ def build_rehearsal_graph(
             json_text = match.group(0)
             llm_decision = json.loads(json_text)
 
-            # Validate and build reviewed_take
+            # --- START OF THE FIX ---
+            # Robustly build reviewed_take, handling potential key mismatches
+            # and stripping speaker tags to prevent duplication.
             reviewed_take = {}
             total_actor_tags = 0
             kept_tags = 0
 
-            for line_num in range(start_line, end_line + 1):
-                line_key = f"line_{line_num}"
-                if line_key in llm_decision:
-                    reviewed_take[line_num] = llm_decision[line_key]
+            # Get the text values from the LLM's response, in order.
+            llm_lines = list(llm_decision.values())
 
-                    # Count tags for metrics
-                    if line_num in actor_take["result"]:
-                        original_text = state.original_lines[line_num]["text"]
-                        actor_text = actor_take["result"][line_num]["text"]
-                        final_text = llm_decision[line_key]
-
-                        orig_tags = len(re.findall(r"\(.*?\)", original_text))
-                        actor_tags = len(re.findall(r"\(.*?\)", actor_text))
-                        final_tags = len(re.findall(r"\(.*?\)", final_text))
-
-                        total_actor_tags += max(0, actor_tags - orig_tags)
-                        kept_tags += max(0, final_tags - orig_tags)
-                elif 0 <= line_num < len(state.original_lines):
-                    # Fall back to original text
+            for i, line_num in enumerate(range(start_line, end_line + 1)):
+                if i < len(llm_lines):
+                    # We have a corresponding line from the LLM.
+                    raw_text = llm_lines[i]
+                    cleaned_text = re.sub(r"^\s*\[.*?\]\s*", "", raw_text).strip()
+                    reviewed_take[line_num] = cleaned_text
+                else:
+                    # The LLM returned fewer lines than expected. Fall back.
+                    logger.warning(
+                        f"LLM review returned too few lines for moment. Reverting "
+                        f"line {line_num}."
+                    )
                     reviewed_take[line_num] = state.original_lines[line_num]["text"]
+
+                # Recalculate tag metrics based on the final, cleaned text
+                if line_num in actor_take["result"]:
+                    original_text = state.original_lines[line_num]["text"]
+                    actor_text = actor_take["result"][line_num]["text"]
+                    final_text = reviewed_take[line_num]
+
+                    orig_tags = len(re.findall(r"\(.*?\)", original_text))
+                    actor_tags = len(re.findall(r"\(.*?\)", actor_text))
+                    final_tags = len(re.findall(r"\(.*?\)", final_text))
+
+                    total_actor_tags += max(0, actor_tags - orig_tags)
+                    kept_tags += max(0, final_tags - orig_tags)
+            # --- END OF THE FIX ---
 
             review_duration = time.time() - review_start_time
 
@@ -564,7 +637,7 @@ def build_rehearsal_graph(
                 f"{review_duration:.2f}s"
             )
 
-            # Conditionally log at INFO level only if changes were made
+            # Prepare the "before" state (the actor's take) for comparison.
             actor_take_text_by_line = {}
             for line_num in range(start_line, end_line + 1):
                 if line_num in actor_take["result"]:
@@ -576,11 +649,18 @@ def build_rehearsal_graph(
                         "text"
                     ]
 
-            changes_made = reviewed_take != actor_take_text_by_line
+            changes_made = _check_for_review_changes(
+                actor_take_text_by_line, reviewed_take
+            )
             if changes_made:
                 formatted_lines = []
                 for line_num in sorted(reviewed_take.keys()):
-                    formatted_lines.append((line_num, reviewed_take[line_num]))
+                    # For logging, add the speaker tag back in for clarity
+                    line = state.original_lines[line_num]
+                    speaker = line.get("speaker_name") or line["speaker"]
+                    formatted_lines.append(
+                        (line_num, f"[{speaker}] {reviewed_take[line_num]}")
+                    )
                 logger.info(
                     f"Final script after Director's Review (changes made):\n"
                     f"{_format_script_for_log(formatted_lines)}"
@@ -628,9 +708,7 @@ def build_rehearsal_graph(
             return "finalize_moment"
 
         # Get the configured review mode
-        from shared.config import config as shared_config
-
-        review_mode = shared_config.director_agent["review"]["mode"]
+        review_mode = config.director_agent["review"]["mode"]
         moment_id = actor_take.get("moment_id", "unknown")
 
         logger.info(
@@ -730,30 +808,41 @@ def build_rehearsal_graph(
             # Use reviewed_take if available (from Director's Final Cut),
             # otherwise fall back to actor result
             if state.reviewed_take:
-                # Apply Director's Final Cut decisions
-                for line_num, final_text in state.reviewed_take.items():
-                    if 0 <= line_num < len(updated_lines):
-                        # Preserve original structure but update text
-                        updated_line = updated_lines[line_num].copy()
-                        updated_line["text"] = final_text
-                        updated_lines[line_num] = updated_line
-
                 # Calculate tags spent based on final reviewed version
                 director_result = {}
                 for line_num, final_text in state.reviewed_take.items():
                     if 0 <= line_num < len(state.original_lines):
                         director_result[line_num] = {
                             "speaker": state.original_lines[line_num]["speaker"],
+                            "speaker_name": state.original_lines[line_num].get(
+                                "speaker_name"
+                            )
+                            or state.original_lines[line_num]["speaker"],
                             "text": final_text,
                             "global_line_number": line_num,
                         }
+
+                # Apply Director's Final Cut decisions
+                for line_num, line_obj in director_result.items():
+                    if 0 <= line_num < len(updated_lines):
+                        updated_lines[line_num] = line_obj
             else:
                 # Fall back to original actor result (backward compatibility)
                 director_result = actor_take["result"]
 
                 # Update finalized lines with actor's original result
                 for line_number, line_obj in director_result.items():
-                    updated_lines[line_number] = line_obj
+                    updated_lines[line_number] = {
+                        "speaker": line_obj["speaker"],
+                        "speaker_name": state.original_lines[line_number].get(
+                            "speaker_name"
+                        )
+                        or line_obj["speaker"],
+                        "text": line_obj["text"],
+                        "global_line_number": line_obj.get(
+                            "global_line_number", line_number
+                        ),
+                    }
 
             # Calculate tags spent and update budget
             tags_spent = director._calculate_tags_spent(
@@ -762,6 +851,19 @@ def build_rehearsal_graph(
             logger.info(f"Moment {primary['moment_id']} spent {tags_spent:.2f} tokens")
 
             updated_bucket.spend(tags_spent)
+
+            # REPLENISH and CAP the token bucket after spending.
+            # 1. Replenish what was earned by processing the moment's lines.
+            lines_in_moment = len(primary["lines"])
+            rate = config.director_agent["rate_control"]["target_tag_rate"]
+            earned_credits = lines_in_moment * rate
+            updated_bucket.tokens += (
+                earned_credits  # Directly add to the internal token count
+            )
+
+            # 2. Cap the bucket at its maximum value to prevent overflow.
+            max_allowance = config.director_agent["rate_control"]["tag_burst_allowance"]
+            updated_bucket.tokens = min(updated_bucket.tokens, max_allowance)
 
             # Mark primary as finalized
             updated_cache[primary["moment_id"]]["is_finalized"] = True
@@ -804,16 +906,42 @@ def build_rehearsal_graph(
 
         return result
 
+    @log_node("final_cleanup")
+    def final_cleanup(state: RehearsalStateModel) -> Dict[str, Any]:
+        """Perform a final cleanup pass on the script before ending."""
+        logger.debug("Performing final cleanup of the script.")
+
+        pause_placeholder = config.PAUSE_PLACEHOLDER
+
+        cleaned_lines = []
+        lines_cleaned = 0
+        for line in state.finalized_lines:
+            cleaned_line = line.copy()
+            if pause_placeholder in cleaned_line["text"]:
+                # Replace placeholder with a single space to connect the text
+                cleaned_line["text"] = (
+                    cleaned_line["text"].replace(pause_placeholder, " ").strip()
+                )
+                lines_cleaned += 1
+            cleaned_lines.append(cleaned_line)
+
+        if lines_cleaned > 0:
+            logger.info(
+                f"Final cleanup removed {lines_cleaned} leftover placeholder(s)."
+            )
+
+        return {"finalized_lines": cleaned_lines}
+
     # Router function
     def should_continue_rehearsal(state: RehearsalStateModel) -> str:
-        """Route to continue processing or end."""
+        """Route to continue processing, clean up, or end."""
         # Check if all lines have been processed
         if state.current_line_index >= len(state.original_lines):
             logger.debug(
-                "Router 'should_continue_rehearsal' routing to: END "
+                "Router 'should_continue_rehearsal' routing to: final_cleanup "
                 "(all lines processed)"
             )
-            return str(END)  # Convert END to string to satisfy type checker
+            return "final_cleanup"
 
         logger.debug("Router 'should_continue_rehearsal' routing to: define_moment")
         return "define_moment"
@@ -850,12 +978,24 @@ def build_rehearsal_graph(
         RunnableLambda(finalize_moment),
         input_schema=RehearsalStateModel,
     )
+    builder.add_node(
+        "final_cleanup",
+        RunnableLambda(final_cleanup),
+        input_schema=RehearsalStateModel,
+    )
 
     # Set up edges
     builder.set_entry_point("initialize")
 
     # From initialize, go to conditional routing
-    builder.add_conditional_edges("initialize", should_continue_rehearsal)
+    builder.add_conditional_edges(
+        "initialize",
+        should_continue_rehearsal,
+        {
+            "define_moment": "define_moment",
+            "end_rehearsal": "final_cleanup",  # Add the new path
+        },
+    )
 
     # Main loop edges
     builder.add_edge("define_moment", "actor_perform_moment")
@@ -885,14 +1025,23 @@ def build_rehearsal_graph(
     )
 
     # From finalize_moment back to conditional routing
-    builder.add_conditional_edges("finalize_moment", should_continue_rehearsal)
+    builder.add_conditional_edges(
+        "finalize_moment",
+        should_continue_rehearsal,
+        {
+            "define_moment": "define_moment",
+            "final_cleanup": "final_cleanup",  # noqa: E501
+        },
+    )
+
+    # Add the final edge from our new node to END
+    builder.add_edge("final_cleanup", END)
+
     # Compile with checkpointer
     if checkpointer is None:
         # Use SqliteSaver (persistent checkpointing) if no checkpointer provided
         # Create SqliteSaver with a direct connection
         import sqlite3
-
-        from shared.config import config
 
         conn = sqlite3.connect(config.REHEARSAL_CHECKPOINT_PATH)
         checkpointer = SqliteSaver(conn)

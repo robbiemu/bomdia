@@ -155,14 +155,16 @@ class DiaTTS:
         logger.debug(f"Chunked transcript:\n{log_of_chunked_transcripts}")
 
         # Prepare arguments for the batch call
-        generate_kwargs: Dict[str, bool | str | list[str] | int | float | None] = {
-            "text": texts[0] if len(texts) == 1 else texts,
-            "verbose": self.log_level in (logging.INFO, logging.DEBUG),
-        }
+        generate_kwargs: Dict[str, bool | str | list[str] | int | float | None] = dict()
+        if self.log_level in (logging.INFO, logging.DEBUG):
+            generate_kwargs["verbose"] = True
         generate_kwargs.update(config.DIA_GENERATE_PARAMS)
         if self.seed:
             logger.info(f"Using seed {self.seed}")
             generate_kwargs["voice_seed"] = self.seed
+        logger.debug(f"Generating with parameters {generate_kwargs}")
+
+        generate_kwargs["text"] = texts[0] if len(texts) == 1 else texts
         if audio_prompts:
             logger.debug("Attaching audio prompts for generation")
             # Filter out None values to satisfy type checker

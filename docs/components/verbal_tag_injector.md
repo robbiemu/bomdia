@@ -11,6 +11,7 @@ This component can be bypassed entirely by using the `--no-rehearsals` command-l
 The core of this component is the Director/Actor model.
 
 ### Director
+The Director's behavior is guided by a consistent `system_prompt` to establish its role.
 
 The Director is responsible for:
 -   **Narrative Moment Discovery**: Identifying narrative moments based on consistent topic, intention, and emotional tone.
@@ -19,6 +20,7 @@ The Director is responsible for:
 -   **Orchestration**: Driving the rehearsal process, defining moments, and delegating to the Actor.
 
 ### Actor
+The Actor's behavior is also guided by a `system_prompt` to ensure it performs its role as a voice actor correctly.
 
 The Actor is responsible for:
 -   **Creative Performance**: Generating the actual verbal tags for a given moment.
@@ -26,7 +28,7 @@ The Actor is responsible for:
 
 ### Workflow
 
-1.  **Setup**: The Director initializes the transcript, generates a global summary, and sets up the token bucket for pacing.
+1.  **Setup**: The Director initializes the transcript, generates a global summary, and sets up the token bucket for pacing. All LLM calls are guided by system prompts.
 2.  **Graph-Based Rehearsal**: The Director's orchestration logic is managed by a **LangGraph state machine**. This graph iterates through the script's state (`current_line_index`), discovering and defining moments in a persistent and resumable workflow.
 3.  **Performance**: When a moment is complete, the Director delegates to the Actor to perform the moment.
 4.  **Director's Final Cut**: The Director reviews the Actor's performance through one of two modes:
@@ -34,6 +36,7 @@ The Actor is responsible for:
     -   **LLM Mode**: Slower, higher-quality LLM-based review that uses contextual intelligence to choose which tags to keep or remove.
 5.  **Fallback Protection**: If LLM mode fails, the system automatically falls back to procedural mode with detailed logging.
 6.  **Recomposition**: The reviewed lines are placed back into the final script.
+7.  **Final Cleanup**: Before finishing, a final pass removes any leftover technical placeholders to ensure a clean output script.
 
 ## Director's Final Cut
 
@@ -41,11 +44,11 @@ The Director's Final Cut is a quality control phase that ensures Actor performan
 
 ### Review Modes
 
-#### Procedural Mode (Default)
+#### Procedural Mode
 
 -   **Speed**: Fast, algorithmic processing
 -   **Logic**: Removes the last N newly added tags in reading order to meet budget
--   **Use Case**: Production environments where speed is critical
+-   **Use Case**: Environments where speed is critical or as a reliable fallback.
 -   **Reliability**: Deterministic, always produces budget-compliant results
 
 #### LLM Mode
@@ -63,7 +66,7 @@ The Director's Final Cut is a quality control phase that ensures Actor performan
 
 ```toml
 [director_agent.review]
-mode = "procedural"  # or "llm"
+mode = "llm"  # or "procedural"
 ```
 
 Environment override: `DIRECTOR_AGENT_REVIEW_MODE=llm`

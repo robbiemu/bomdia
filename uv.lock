@@ -336,7 +336,7 @@ wheels = [
 
 [[package]]
 name = "bomdia"
-version = "0.1.6"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "datasets" },
@@ -370,6 +370,9 @@ dev = [
     { name = "ruff" },
     { name = "types-toml" },
 ]
+tracing = [
+    { name = "langsmith" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -378,6 +381,7 @@ requires-dist = [
     { name = "datasets", specifier = "~=4.0.0" },
     { name = "langgraph", specifier = "~=0.6.4" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=2.0.11" },
+    { name = "langsmith", marker = "extra == 'tracing'", specifier = ">=0.4.13" },
     { name = "litellm", specifier = "~=1.75.5" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "~=1.11" },
     { name = "nari-tts", directory = "../dia" },
@@ -399,7 +403,7 @@ requires-dist = [
     { name = "transformers", specifier = "~=4.55.0" },
     { name = "types-toml", marker = "extra == 'dev'", specifier = ">=0.10.8.20240310" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "tracing"]
 
 [[package]]
 name = "brotli"

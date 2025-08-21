@@ -27,12 +27,13 @@ Main entry point for parsing transcripts. Automatically detects the file format 
 **Returns:** List of dictionaries with 'speaker' and 'text' keys
 
 #### `parse_simple_txt(path)`
-Parses simple text files with speaker annotations.
+Parses simple text files with speaker annotations, intelligently extracting speaker IDs, optional speaker names, and dialogue text. Fully backward-compatible with legacy formats while supporting enhanced speaker identification.
 
-Supports three line formats:
-1. `[S1] text...` - Explicit speaker tags in brackets
-2. `Name: text...` - Name-based speaker identification
-3. `bare text` - Assumed to be continuation of previous speaker or S1 if first line
+Supports multiple line formats:
+1. `[S1: John] Hello there.` - Named speaker tag (preferred format for maximum context)
+2. `[S2] I'm doing well.` - Simple speaker tag (original format, fully supported)
+3. `John: How are you?` - Colon-delimited name (parser assigns automatic speaker ID)
+4. `bare text` - Continuation line (treated as part of previous speaker's dialogue)
 
 **Parameters:**
 - `path` (str): Path to the text file to parse
@@ -40,7 +41,7 @@ Supports three line formats:
 **Returns:** List of dictionaries with 'speaker' and 'text' keys
 
 #### `parse_srt(path)`
-Parses SRT subtitle files, extracting text content while ignoring timestamps.
+Parses SRT subtitle files, extracting text content while ignoring timestamps. All lines are attributed to a default speaker.
 
 **Parameters:**
 - `path` (str): Path to the .srt file to parse
@@ -68,12 +69,23 @@ The component requires no special configuration beyond what is provided by the s
 ## Usage Examples
 
 ### Simple Text Format
+
+The parser supports multiple formats for flexible transcript creation:
+
 ```
-[S1] Hello there
-John: How are you?
-[S2] I'm doing well
-Nice to hear
+[S1: Alice] Hello there, how are you today?
+John: I'm doing well, thanks for asking!
+[S2] That's great to hear.
+I was wondering if you'd like to join us for lunch?
+Yeah, that sounds like a plan.
 ```
+
+**Format Breakdown:**
+- `[S1: Alice] Hello there, how are you today?` - Named speaker tag (preferred format)
+- `John: I'm doing well, thanks for asking!` - Colon-delimited name (automatic speaker ID assigned)
+- `[S2] That's great to hear.` - Simple speaker tag (original format)
+- `I was wondering if you'd like to join us for lunch?` - Continuation line (part of S2's dialogue)
+- `Yeah, that sounds like a plan.` - Another continuation line (still part of S2's dialogue)
 
 ### SRT Format
 ```

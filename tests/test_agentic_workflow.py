@@ -58,19 +58,13 @@ class TestAgenticWorkflow(unittest.TestCase):
                     if "You are a script analyst" in messages[0]["content"]:
 
                         class MockResponse:
-                            content = (
-                                "Topic: Greeting. Relationship: Friendly. "
-                                "Arc: Positive."
-                            )
+                            content = '{"summary": "A friendly greeting and a test with a pause."}'
 
                         return MockResponse()
 
                     # Mock response for the moment performance
                     class MockResponse:
-                        content = (
-                            "[S1] Hello world.\n[S2] This is a test (um) with "
-                            "a pause.\n[S1] And another line."
-                        )
+                        content = '{"0": {"speaker": "S1", "text": "Hello world."}, "1": {"speaker": "S2", "text": "This is a test (um) with a pause."}, "2": {"speaker": "S1", "text": "And another line."}}'
 
                     return MockResponse()
 
@@ -91,7 +85,13 @@ class TestAgenticWorkflow(unittest.TestCase):
             ):  # Ensure LLM is available
                 # Mock the actor's perform_moment function
                 def mock_perform_moment(
-                    self, moment_id, lines, token_budget, constraints, global_summary
+                    self,
+                    moment_id,
+                    lines,
+                    token_budget,
+                    constraints,
+                    global_summary,
+                    sample_name,
                 ):
                     # Simple mock that just returns the lines with pause
                     #  placeholders replaced
@@ -103,6 +103,7 @@ class TestAgenticWorkflow(unittest.TestCase):
                             text = text.replace("[insert-verbal-tag-for-pause]", "(um)")
                         result[line_number] = {
                             "speaker": line["speaker"],
+                            "speaker_name": line["speaker_name"],
                             "text": text,
                             "global_line_number": line_number,
                         }
@@ -241,6 +242,7 @@ class TestAgenticWorkflow(unittest.TestCase):
                         token_budget,
                         constraints,
                         global_summary,
+                        sample_name,
                     ):
                         result = {}
                         for line in lines:
@@ -248,6 +250,7 @@ class TestAgenticWorkflow(unittest.TestCase):
                             modified_text = f"(logged) {line['text']}"
                             result[line_number] = {
                                 "speaker": line["speaker"],
+                                "speaker_name": line.get("speaker_name"),
                                 "text": modified_text,
                                 "global_line_number": line_number,
                             }
@@ -320,12 +323,7 @@ class TestAgenticWorkflow(unittest.TestCase):
 
         # Second call is for moment discovery
         mock_moment_response = MagicMock()
-        mock_moment_response.content = """{
-      "moment_summary": "Discussion about the movie",
-      "directors_notes": "Focus on the contrast in opinions about the movie",
-      "start_line": 0,
-      "end_line": 2
-    }"""
+        mock_moment_response.content = '{"moment_summary": "Discussion about the movie", "directors_notes": "Focus on the contrast in opinions about the movie", "start_line": 0, "end_line": 2}'
 
         mock_llm_invoker.invoke.side_effect = [
             mock_global_summary,
@@ -347,13 +345,6 @@ class TestAgenticWorkflow(unittest.TestCase):
             self.assertEqual(moments[0]["end_line"], 2)
             self.assertIn("movie", moments[0]["description"].lower())
 
-    @patch.dict(
-        os.environ,
-        {
-            "MAX_TAG_RATE": "1",
-            "REHEARSAL_CHECKPOINT_PATH": ":memory:",  # Use in-memory SQLite
-        },
-    )
     def test_simple_director_run(self):
         """Test a simple director run to see what's happening."""
         # Create a simple transcript
@@ -371,12 +362,7 @@ class TestAgenticWorkflow(unittest.TestCase):
 
         # Second call is for moment definition
         mock_moment_definition = MagicMock()
-        mock_moment_definition.content = """{
-      "moment_summary": "Two line moment",
-      "directors_notes": "Director's notes for two line moment",
-      "start_line": 0,
-      "end_line": 1
-    }"""
+        mock_moment_definition.content = '{"moment_summary": "Two line moment", "directors_notes": "Director a notes for two line moment", "start_line": 0, "end_line": 1}'
 
         mock_llm_invoker.invoke.side_effect = [
             mock_global_summary,
@@ -388,37 +374,88 @@ class TestAgenticWorkflow(unittest.TestCase):
             "src.components.verbal_tag_injector.director.LiteLLMInvoker",
             return_value=mock_llm_invoker,
         ):
+            # Patch the config.MAX_TAG_RATE directly
+            with patch("shared.config.config.MAX_TAG_RATE", 0.5):
+                director = Director(transcript)
+
+                # Mock the actor's perform_moment method
+                def mock_perform_moment(
+                    self,
+                    moment_id,
+                    lines,
+                    token_budget,
+                    constraints,
+                    global_summary,
+                    sample_name,
+                ):
+                    result = {}
+                    for line in lines:
+                        line_number = line["global_line_number"]
+                        modified_text = f"(modified) {line['text']}"
+                        result[line_number] = {
+                            "speaker": line["speaker"],
+                            "speaker_name": line.get("speaker_name"),
+                            "text": modified_text,
+                            "global_line_number": line_number,
+                        }
+                    return result
+
+                with patch(
+                    "src.components.verbal_tag_injector.actor.Actor.perform_moment",
+                    mock_perform_moment,
+                ):
+                    final_script = director.run_rehearsal()
+
+                    self.assertIn("(modified)", final_script[0]["text"])
+
+    def test_langsmith_tracing(self):
+        # Test when tracing is enabled
+        with patch.dict(
+            os.environ, {"LANGCHAIN_TRACING_V2": "true", "LANGCHAIN_API_KEY": "test"}
+        ):
+            # We need to reload the module to pick up the environment variables
             import importlib
 
-            import shared.config
+            import shared.llm_invoker
 
-            importlib.reload(shared.config)
+            importlib.reload(shared.llm_invoker)
 
-            director = Director(transcript)
+            # Now test that the traceable decorator was applied
+            from shared.llm_invoker import LiteLLMInvoker
 
-            # Mock the actor's perform_moment method
-            def mock_perform_moment(
-                self, moment_id, lines, token_budget, constraints, global_summary
-            ):
-                result = {}
-                for line in lines:
-                    line_number = line["global_line_number"]
-                    modified_text = f"(modified) {line['text']}"
-                    result[line_number] = {
-                        "speaker": line["speaker"],
-                        "text": modified_text,
-                        "global_line_number": line_number,
-                    }
-                return result
+            invoker = LiteLLMInvoker(model="test")
+            # We can't easily test that the decorator was called since it's applied at import time
 
-            with patch(
-                "src.components.verbal_tag_injector.actor.Actor.perform_moment",
-                mock_perform_moment,
-            ):
-                final_script = director.run_rehearsal()
+        # Test when tracing is disabled
+        with patch.dict(os.environ, {"LANGCHAIN_TRACING_V2": "false"}):
+            # Reload again to pick up the new environment
+            import importlib
 
-                # Check if the actor was called by looking at the final script
-                self.assertIn("(modified)", final_script[0]["text"])
+            import shared.llm_invoker
+
+            importlib.reload(shared.llm_invoker)
+
+            # Now test that the traceable decorator was not applied (uses dummy)
+            from shared.llm_invoker import LiteLLMInvoker
+
+            invoker = LiteLLMInvoker(model="test")
+
+    def test_token_bucket_logic(self):
+        from src.components.verbal_tag_injector.token_bucket import TokenBucket
+
+        bucket = TokenBucket(rate=0.5, burst_allowance=10)
+        self.assertEqual(bucket.get_available_tokens(), 10)
+        bucket.spend(5)
+        self.assertEqual(bucket.get_available_tokens(), 5)
+        # Initialize last_line_index by calling refill with a positive index
+        bucket.refill(0)
+        # Now refill with a higher index to add tokens
+        bucket.refill(10)  # 10 lines processed, rate is 0.5, so 5 new tokens
+        self.assertEqual(
+            bucket.get_available_tokens(), 10
+        )  # 5 + 5 = 10, capped at burst_allowance
+        bucket.spend(15)
+        self.assertEqual(bucket.get_available_tokens(), 0)
 
 
 class TestPersistenceAndResumption:

@@ -188,7 +188,13 @@ def test_run_rehearsal_with_new_tag_injection_and_budget(
 
         # Mock the actor to return lines with new tags
         def mock_perform_moment(
-            self, moment_id, lines, token_budget, constraints, global_summary
+            self,
+            moment_id,
+            lines,
+            token_budget,
+            constraints,
+            global_summary,
+            sample_name,
         ):
             result = {}
             for i, line in enumerate(lines):
@@ -275,7 +281,13 @@ def test_pivot_line_forward_cascading_edits(mock_llm_invoker):
 
         # Mock the actor's perform_moment method to simulate different behaviors
         def mock_perform_moment(
-            self, moment_id, lines, token_budget, constraints, global_summary
+            self,
+            moment_id,
+            lines,
+            token_budget,
+            constraints,
+            global_summary,
+            sample_name,
         ):
             result = {}
             for line in lines:
@@ -549,7 +561,13 @@ class TestActorAndDirectorWorkflow:
 
             # Mock the actor's perform_moment method to return modified lines
             def mock_perform_moment(
-                self, moment_id, lines, token_budget, constraints, global_summary
+                self,
+                moment_id,
+                lines,
+                token_budget,
+                constraints,
+                global_summary,
+                sample_name,
             ):
                 result = {}
                 for line in lines:

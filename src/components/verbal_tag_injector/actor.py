@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Dict, List
 
 from shared.config import config
@@ -20,6 +21,7 @@ class Actor:
         token_budget: float,
         constraints: Dict,
         global_summary: str,
+        sample_name: str,
     ) -> Dict:
         """
         Perform a moment by processing all lines in the moment with holistic context.
@@ -30,16 +32,19 @@ class Actor:
             token_budget: Available token budget for this moment
             constraints: Dictionary of constraints for specific lines
             global_summary: Global summary of the entire transcript
+            sample_name: A name from the script
 
         Returns:
             Dict mapping line numbers to processed line objects
         """
         logger.info(f"[Actor] Performing moment {moment_id} with {len(lines)} lines")
 
-        # Create a context string with all lines in the moment
+        # Create a context string with all lines in the moment, including line numbers
         moment_lines_text = []
         for line in lines:
-            moment_lines_text.append(f"[{line['speaker']}] {line['text']}")
+            line_num = line["global_line_number"]
+            speaker = line.get("speaker_name") or line["speaker"]
+            moment_lines_text.append(f"line_{line_num}: [{speaker}] {line['text']}")
         moment_text = "\n".join(moment_lines_text)
 
         # Build constraints message if any
@@ -56,11 +61,21 @@ class Actor:
             global_summary=global_summary,
             token_budget=token_budget,
             constraints_text=constraints_text,
+            start_line=lines[0]["global_line_number"],
+            sample_name=sample_name,
         )
 
         logger.debug(f"Final prompt for Actor:\n{prompt}")
 
-        messages = [{"role": "user", "content": prompt}]
+        system_prompt = config.actor_agent.get("system_prompt", "")
+        messages = (
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+            if system_prompt
+            else [{"role": "user", "content": prompt}]
+        )
         logger.debug("Sending prompt to LLM for moment performance...")
         response = self.llm_invoker.invoke(messages)
         logger.debug(f"Raw LLM response for moment performance:\n{response.content}")
@@ -89,6 +104,8 @@ class Actor:
         global_summary: str,
         token_budget: float,
         constraints_text: str,
+        start_line: int,
+        sample_name: str,
     ) -> str:
         """
         Format the prompt for the LLM based on the task directive template.
@@ -106,6 +123,9 @@ class Actor:
             constraints_text=constraints_text,
             available_verbal_tags=verbal_tags_list,
             available_line_combiners=line_combiners_list,
+            start_line=start_line,
+            start_line_plus_1=start_line + 1,
+            sample_name=sample_name,
         )
         return str(prompt)  # Explicitly cast to str to satisfy MyPy
 
@@ -128,19 +148,23 @@ class Actor:
 
             # Extract lines in order
             tagged_lines = []
-            for i, line in enumerate(original_lines):
-                line_key = f"line_{i}"
+            # Loop through the original lines to find the expected GLOBAL keys
+            for line in original_lines:
+                global_line_num = line["global_line_number"]
+                line_key = f"line_{global_line_num}"
+
                 if line_key in response_data:
-                    tagged_lines.append(response_data[line_key])
+                    raw_text = response_data[line_key]
+                    # Defensively strip any leading speaker tags the LLM might add.
+                    cleaned_text = re.sub(r"^\s*\[.*?\]\s*", "", raw_text)
+                    tagged_lines.append(cleaned_text)
                 else:
                     logger.warning(
                         f"Key '{line_key}' not found in Actor's JSON response. "
-                        f"Falling back to original text for line "
-                        f"{line['global_line_number']}."
+                        f"Falling back to original text for line {global_line_num}."
                     )
                     # Fallback to original text if not found
                     tagged_lines.append(line["text"])
-
             return tagged_lines
 
         except json.JSONDecodeError:

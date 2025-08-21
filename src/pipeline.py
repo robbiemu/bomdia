@@ -59,18 +59,7 @@ class TranscriptProcessor:
     def normalize_transcript(lines: List[Dict]) -> List[Dict]:
         """Normalize speaker tags and merge consecutive lines."""
         try:
-            normalized_lines = [
-                {
-                    "speaker": (
-                        ln["speaker"]
-                        if ln["speaker"].startswith("S")
-                        else ln["speaker"]
-                    ),
-                    "text": ln["text"],
-                }
-                for ln in lines
-            ]
-            return merge_consecutive_lines(normalized_lines)
+            return merge_consecutive_lines(lines)
         except Exception as e:
             raise RuntimeError(f"Failed to normalize transcript: {str(e)}") from e
 
@@ -387,7 +376,7 @@ class AudioPromptProcessor:
     @staticmethod
     def _get_starting_speaker(chunk: str) -> Optional[str]:
         """Extract the starting speaker from a chunk."""
-        match = re.search(r"^\[(S\d+)\]", chunk.strip())
+        match = re.search(r"^[(S\d+)]", chunk.strip())
         return match.group(1) if match else None
 
     @staticmethod

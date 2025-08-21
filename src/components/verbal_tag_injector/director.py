@@ -75,13 +75,24 @@ class Director:
         # The generation itself is a background detail. The result is what's important.
         logger.debug("Generating global summary...")
         transcript_text = "\n".join(
-            [f"[{line['speaker']}] {line['text']}" for line in self.original_lines]
+            [
+                f"[{line.get('speaker_name') or line['speaker']}] {line['text']}"
+                for line in self.original_lines
+            ]
         )
         prompt = config.director_agent["global_summary_prompt"].format(
             transcript_text=transcript_text
         )
 
-        messages = [{"role": "user", "content": prompt}]
+        system_prompt = config.director_agent.get("system_prompt", "")
+        messages = (
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+            if system_prompt
+            else [{"role": "user", "content": prompt}]
+        )
         response = self.llm_invoker.invoke(messages)
         # The summary itself is key context, so log it at INFO.
         logger.info(f"Global Summary Generated: {response.content}")
@@ -135,7 +146,8 @@ class Director:
         for i in range(start_line, end_line):
             line_obj = self.original_lines[i]
             forward_script_slice.append(
-                f"{i}: [{line_obj['speaker']}] {line_obj['text']}"
+                f"{i}: [{line_obj.get('speaker_name') or line_obj['speaker']}] "
+                f"{line_obj['text']}"
             )
 
         forward_script_slice_text = "\n".join(forward_script_slice)
@@ -158,7 +170,15 @@ class Director:
             line_number=line_number,
         )
 
-        messages = [{"role": "user", "content": prompt}]
+        system_prompt = config.director_agent.get("system_prompt", "")
+        messages = (
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+            if system_prompt
+            else [{"role": "user", "content": prompt}]
+        )
         try:
             response = self.llm_invoker.invoke(messages)
 
@@ -361,12 +381,19 @@ class Director:
 
         # Actor's Performance (One Call)
         logger.debug("Delegating to Actor for creative suggestion...")
+        sample_name = ""
+        if actor_script:
+            sample_name = (
+                actor_script[0].get("speaker_name") or actor_script[0]["speaker"]
+            )
+
         actor_result = self.actor.perform_moment(
             moment_id=moment_id,
             lines=actor_script,
             token_budget=moment_token_budget,
             constraints=constraints,
             global_summary=self.global_summary,
+            sample_name=sample_name,
         )
 
         # Director's Review (One Call)

@@ -6,9 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-Of course. Here is the changelog entry for version 0.2.0, written in the style of the existing `CHANGELOG.md`.
+## [0.2.1] - 2025-08-21
 
----
+### Added
+- **Optional LangSmith Tracing**: Integrated optional support for LangSmith to provide detailed tracing of the agentic workflow. This is enabled via the new `[tracing]` optional dependency and environment variables.
+
+### Changed
+- **Agent Prompt Overhaul**: Rewrote and restructured all agent prompts for clarity and reliability. System prompts are now used to establish consistent roles for the Director and Actor agents.
+- **Enhanced Transcript Parsing**: The script parser now supports more formats, including `Speaker Name: Dialogue` and `[S1: Speaker Name]`, and correctly distinguishes between speaker IDs and names throughout the pipeline.
+- **Default Model and Parameters**: Switched the default LLM to `cerebras/llama-4-scout-17b-16e-instruct` and tuned default generation parameters for improved performance.
+
+### Fixed
+- **LLM Response Handling**: Implemented defensive post-processing to automatically strip extraneous speaker tags that the LLM might mistakenly add to its response, preventing duplicated information in the final script.
+- **Director Review Robustness**: The Director's review step is now more resilient to malformed JSON responses from the LLM, preventing failures and falling back gracefully.
+- **Verbal Tag Rate Limiting**: Corrected the logic for the token bucket that controls the rate of new verbal tags, ensuring it replenishes and caps correctly to prevent budget overruns.
+- **Final Script Cleanup**: Added a final cleanup step to the graph to automatically remove any leftover technical placeholders (e.g., `[insert-verbal-tag-for-pause]`) from the script before output.
 
 ## [0.2.0] - 2025-08-19
 
