@@ -61,13 +61,7 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
 
                 # Mock the actor's perform_moment method to add some tags
                 def mock_perform_moment(
-                    self,
-                    moment_id,
-                    lines,
-                    token_budget,
-                    constraints,
-                    global_summary,
-                    sample_name,
+                    self, moment_id, lines, token_budget, constraints, global_summary, sample_name
                 ):
                     result = {}
                     for line in lines:
@@ -86,63 +80,55 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                         }
                     return result
 
-                # Patch the config values we need to change, preserving the rest
-                with patch.dict(
-                    "src.components.verbal_tag_injector.director.config.director_agent",
-                    {"review": {"mode": "llm"}},
-                ):
-                    with patch.multiple(
-                        "src.components.verbal_tag_injector.director.config",
-                        MAX_TAG_RATE=0.5,
+                # Set environment variable for LLM review mode
+                with patch("shared.config.config.DIRECTOR_AGENT_REVIEW_MODE", "llm"):
+                    with patch(
+                        "src.components.verbal_tag_injector.director.LiteLLMInvoker",
+                        return_value=mock_llm_invoker,
                     ):
                         with patch(
-                            "src.components.verbal_tag_injector.director.LiteLLMInvoker",
-                            return_value=mock_llm_invoker,
+                            "src.components.verbal_tag_injector.actor.Actor.perform_moment",
+                            mock_perform_moment,
                         ):
-                            with patch(
-                                "src.components.verbal_tag_injector.actor.Actor.perform_moment",
-                                mock_perform_moment,
+                            # Patch config values directly to avoid reload issues
+                            with patch.multiple(
+                                "shared.config.config",
+                                MAX_TAG_RATE=0.5,
+                                REHEARSAL_CHECKPOINT_PATH=":memory:",
                             ):
-                                # Set environment variable for in-memory SQLite
-                                with patch.dict(
-                                    os.environ,
-                                    {
-                                        "REHEARSAL_CHECKPOINT_PATH": ":memory:",
-                                    },
-                                ):
-                                    # Create director and run rehearsal
-                                    director = Director(self.transcript)
-                                    final_script = director.run_rehearsal()
+                                # Create director and run rehearsal
+                                director = Director(self.transcript)
+                                final_script = director.run_rehearsal()
 
-                                    # Read the log file to check for expected messages
-                                    log_file.seek(0)
-                                    log_content = log_file.read()
+                                # Read the log file to check for expected messages
+                                log_file.seek(0)
+                                log_content = log_file.read()
 
-                                    # Assert that LLM mode was used
-                                    self.assertIn(
-                                        "Director's Final Cut: Using 'llm' review mode",
-                                        log_content,
-                                    )
+                                # Assert that LLM mode was used
+                                self.assertIn(
+                                    "Director's Final Cut: Using 'llm' review mode",
+                                    log_content,
+                                )
 
-                                    # Assert that LLM review was successful (no fallback)
-                                    self.assertNotIn(
-                                        "falling back to procedural", log_content
-                                    )
+                                # Assert that LLM review was successful (no fallback)
+                                self.assertNotIn(
+                                    "falling back to procedural", log_content
+                                )
 
-                                    # Assert that the final script reflects
-                                    #  Director's decisions
-                                    self.assertEqual(len(final_script), 3)
-                                    # Line 0 should have one tag (warmly) kept,
-                                    #  (cheerfully) removed
-                                    self.assertIn("(warmly)", final_script[0]["text"])
-                                    self.assertNotIn(
-                                        "(cheerfully)", final_script[0]["text"]
-                                    )
-                                    # Line 1 should have no tags (reverted to original)
-                                    self.assertEqual(
-                                        final_script[1]["text"],
-                                        "Hi! How are you doing today?",
-                                    )
+                                # Assert that the final script reflects
+                                #  Director's decisions
+                                self.assertEqual(len(final_script), 3)
+                                # Line 0 should have one tag (warmly) kept,
+                                #  (cheerfully) removed
+                                self.assertIn("(warmly)", final_script[0]["text"])
+                                self.assertNotIn(
+                                    "(cheerfully)", final_script[0]["text"]
+                                )
+                                # Line 1 should have no tags (reverted to original)
+                                self.assertEqual(
+                                    final_script[1]["text"],
+                                    "Hi! How are you doing today?",
+                                )
 
             finally:
                 # Clean up
@@ -190,13 +176,7 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
 
                 # Mock the actor's perform_moment method to add some tags
                 def mock_perform_moment(
-                    self,
-                    moment_id,
-                    lines,
-                    token_budget,
-                    constraints,
-                    global_summary,
-                    sample_name,
+                    self, moment_id, lines, token_budget, constraints, global_summary, sample_name
                 ):
                     result = {}
                     for line in lines:
@@ -217,76 +197,68 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                         }
                     return result
 
-                # Patch the config values we need to change, preserving the rest
-                with patch.dict(
-                    "src.components.verbal_tag_injector.director.config.director_agent",
-                    {"review": {"mode": "llm"}},
-                ):
-                    with patch.multiple(
-                        "src.components.verbal_tag_injector.director.config",
-                        MAX_TAG_RATE=0.5,
+                # Set environment variable for LLM review mode
+                with patch("shared.config.config.DIRECTOR_AGENT_REVIEW_MODE", "llm"):
+                    with patch(
+                        "src.components.verbal_tag_injector.director.LiteLLMInvoker",
+                        return_value=mock_llm_invoker,
                     ):
                         with patch(
-                            "src.components.verbal_tag_injector.director.LiteLLMInvoker",
-                            return_value=mock_llm_invoker,
+                            "src.components.verbal_tag_injector.actor.Actor.perform_moment",
+                            mock_perform_moment,
                         ):
-                            with patch(
-                                "src.components.verbal_tag_injector.actor.Actor.perform_moment",
-                                mock_perform_moment,
+                            # Patch config values directly to avoid reload issues
+                            with patch.multiple(
+                                "shared.config.config",
+                                MAX_TAG_RATE=0.5,
+                                REHEARSAL_CHECKPOINT_PATH=":memory:",
                             ):
-                                # Set environment variable for in-memory SQLite
-                                with patch.dict(
-                                    os.environ,
-                                    {
-                                        "REHEARSAL_CHECKPOINT_PATH": ":memory:",
-                                    },
-                                ):
-                                    # Create director and run rehearsal
-                                    director = Director(self.transcript)
-                                    final_script = director.run_rehearsal()
+                                # Create director and run rehearsal
+                                director = Director(self.transcript)
+                                final_script = director.run_rehearsal()
 
-                                    # Read the log file to check for expected messages
-                                    log_file.seek(0)
-                                    log_content = log_file.read()
+                                # Read the log file to check for expected messages
+                                log_file.seek(0)
+                                log_content = log_file.read()
 
-                                    # Assert that LLM mode was attempted first
-                                    self.assertIn(
-                                        "Director's Final Cut: Using 'llm' review mode",
-                                        log_content,
-                                    )
+                                # Assert that LLM mode was attempted first
+                                self.assertIn(
+                                    "Director's Final Cut: Using 'llm' review mode",
+                                    log_content,
+                                )
 
-                                    # Assert that fallback occurred
-                                    self.assertIn("LLM review failed", log_content)
-                                    self.assertIn(
-                                        "falling back to procedural review", log_content
-                                    )
+                                # Assert that fallback occurred
+                                self.assertIn("LLM review failed", log_content)
+                                self.assertIn(
+                                    "falling back to procedural review", log_content
+                                )
 
-                                    # Assert that procedural review was executed
-                                    self.assertIn(
-                                        "Director's Final Cut (Procedural): Removed",
-                                        log_content,
-                                    )
+                                # Assert that procedural review was executed
+                                self.assertIn(
+                                    "Director's Final Cut (Procedural): Removed",
+                                    log_content,
+                                )
 
-                                    # Assert that the final script shows procedural pruning
-                                    # (last tags removed)
-                                    self.assertEqual(len(final_script), 3)
+                                # Assert that the final script shows procedural pruning
+                                # (last tags removed)
+                                self.assertEqual(len(final_script), 3)
 
-                                    # Should have some tags but fewer than Actor added
-                                    total_original_tags = sum(
-                                        len([t for t in line["text"] if t == "("])
-                                        for line in self.transcript
-                                    )
-                                    total_final_tags = sum(
-                                        len([t for t in line["text"] if t == "("])
-                                        for line in final_script
-                                    )
+                                # Should have some tags but fewer than Actor added
+                                total_original_tags = sum(
+                                    len([t for t in line["text"] if t == "("])
+                                    for line in self.transcript
+                                )
+                                total_final_tags = sum(
+                                    len([t for t in line["text"] if t == "("])
+                                    for line in final_script
+                                )
 
-                                    # Final should have more than original but less
-                                    #  than what
-                                    # Actor would have added (due to procedural pruning)
-                                    self.assertGreater(
-                                        total_final_tags, total_original_tags
-                                    )
+                                # Final should have more than original but less
+                                #  than what
+                                # Actor would have added (due to procedural pruning)
+                                self.assertGreater(
+                                    total_final_tags, total_original_tags
+                                )
 
             finally:
                 # Clean up
@@ -338,13 +310,7 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
 
                 # Mock the actor to add some tags
                 def mock_perform_moment(
-                    self,
-                    moment_id,
-                    lines,
-                    token_budget,
-                    constraints,
-                    global_summary,
-                    sample_name,
+                    self, moment_id, lines, token_budget, constraints, global_summary, sample_name
                 ):
                     result = {}
                     for line in lines:
@@ -361,54 +327,64 @@ class TestDirectorsFinalCutLLM(unittest.TestCase):
                         }
                     return result
 
-                # Patch the config values we need to change, preserving the rest
+                # Force LLM review mode and run
                 with patch.dict(
-                    "src.components.verbal_tag_injector.director.config.director_agent",
-                    {"review": {"mode": "llm"}},
+                    os.environ,
+                    {
+                        "DIRECTOR_AGENT_REVIEW_MODE": "llm",
+                        "MAX_TAG_RATE": "1.0",
+                        "REHEARSAL_CHECKPOINT_PATH": ":memory:",  # Use in-memory SQLite
+                    },
                 ):
-                    with patch.multiple(
-                        "src.components.verbal_tag_injector.director.config",
-                        MAX_TAG_RATE=1.0,
+                    # Force reload config to pick up the environment variables
+                    import importlib
+                    import shared.config
+
+                    importlib.reload(shared.config)
+
+                    with patch(
+                        "src.components.verbal_tag_injector.director.LiteLLMInvoker",
+                        return_value=mock_llm_invoker,
                     ):
                         with patch(
-                            "src.components.verbal_tag_injector.director.LiteLLMInvoker",
-                            return_value=mock_llm_invoker,
+                            "src.components.verbal_tag_injector.actor.Actor.perform_moment",
+                            mock_perform_moment,
                         ):
-                            with patch(
-                                "src.components.verbal_tag_injector.actor.Actor.perform_moment",
-                                mock_perform_moment,
+                            # Patch config values directly and set review mode
+                            with patch.multiple(
+                                "shared.config.config",
+                                MAX_TAG_RATE=1.0,
+                                REHEARSAL_CHECKPOINT_PATH=":memory:",
                             ):
-                                # Set environment variable for in-memory SQLite
+                                # Also patch the director agent review mode
                                 with patch.dict(
-                                    os.environ,
-                                    {
-                                        "REHEARSAL_CHECKPOINT_PATH": ":memory:",  # Use in-memory SQLite
-                                    },
+                                    "shared.config.config.director_agent",
+                                    {"review": {"mode": "llm"}},
                                 ):
                                     # Create director and run rehearsal
                                     director = Director(simple_transcript)
                                     final_script = director.run_rehearsal()
 
-                                    # Read the log file to check for expected messages
-                                    log_file.seek(0)
-                                    log_content = log_file.read()
+                            # Read the log file to check for expected messages
+                            log_file.seek(0)
+                            log_content = log_file.read()
 
-                                    # Assert that LLM mode was attempted first
-                                    self.assertIn(
-                                        "Director's Final Cut: Using 'llm' review mode",
-                                        log_content,
-                                    )
+                            # Assert that LLM mode was attempted first
+                            self.assertIn(
+                                "Director's Final Cut: Using 'llm' review mode",
+                                log_content,
+                            )
 
-                                    # Assert that fallback occurred due to exception
-                                    self.assertIn("LLM review failed", log_content)
-                                    self.assertIn(
-                                        "falling back to procedural review", log_content
-                                    )
+                            # Assert that fallback occurred due to exception
+                            self.assertIn("LLM review failed", log_content)
+                            self.assertIn(
+                                "falling back to procedural review", log_content
+                            )
 
-                                    # Assert that the pipeline didn't crash
-                                    self.assertEqual(len(final_script), 2)
-                                    self.assertEqual(final_script[0]["speaker"], "S1")
-                                    self.assertEqual(final_script[1]["speaker"], "S2")
+                            # Assert that the pipeline didn't crash
+                            self.assertEqual(len(final_script), 2)
+                            self.assertEqual(final_script[0]["speaker"], "S1")
+                            self.assertEqual(final_script[1]["speaker"], "S2")
 
             finally:
                 # Clean up

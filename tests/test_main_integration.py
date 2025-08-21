@@ -92,6 +92,7 @@ def test_main_pipeline_integration(tmp_path, monkeypatch):
         token_budget,
         constraints,
         global_summary,
+        sample_name=None,
     ):
         # Simple mock that just returns the lines as they are
         result = {}

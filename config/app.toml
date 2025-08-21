@@ -11,36 +11,34 @@ dia_compute_dtype = "float32"
 # device = "cpu"
 
 # LiteLLM model string (e.g., "openai/gpt-4o-mini", "ollama/llama3", "claude-3-haiku-20240307")
-llm_spec = "openai/gpt-4o-mini"
+llm_spec = "cerebras/llama-4-scout-17b-16e-instruct"
 
 [model.dia_generate_params]
 # Uncomment and set any of the following parameters to override the DiaTTS
 # model's internal defaults. Only the parameters you provide will be used.
 # cfg_scale = 3.0
-cfg_scale = 4.0
+cfg_scale = 4.5
 # temperature = 1.2
 # top_p = 0.95
 # top_k = 45
 # max_tokens for audio generation default is 3072
-max_tokens = 1096
 # use_torch_compile = false
 
 [model.parameters]
-temperature = 0.5
+temperature = 1
 max_tokens = 4096
 
 [pipeline]
 context_window = 2
 pause_placeholder = "[insert-verbal-tag-for-pause]"
-max_tag_rate = 0.15
+max_tag_rate = 0.25
 avg_wps = 2.5
-max_new_tokens_cap = 1600
 # Optionally define a seed for specific voice pair and genation characteristics
 # seed = 12345
 # Whether to generate synthetic voice prompts for unprompted speakers (default: True)
 generate_synthetic_prompts = false
 
-[tags]
+[tags] # TODO - this seems to belong in prompts
 verbal_tags = [
     "(laughs)",
     "(clears throat)",
@@ -73,7 +71,7 @@ line_combiners = [
 
 [director_agent.rate_control]
 # The target ratio of lines that should receive a new verbal tag (e.g., 0.10 for 10%).
-target_tag_rate = 0.16
+target_tag_rate = 0.16 # TODO - WHY is this separate from max_tag_rate? Why is it in director, the logic is in the graph right?
 # The maximum number of "burst" tags the agent can inject above its target rate.
 # This allows it to handle emotionally dense scenes.
 tag_burst_allowance = 3

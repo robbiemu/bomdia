@@ -99,7 +99,7 @@ def parse_simple_txt(path: str) -> List[Dict]:
         if m:
             speaker = m.group(1)
             text = m.group(2).strip()
-            parsed.append({"speaker": speaker, "text": text})
+            parsed.append({"speaker": speaker, "speaker_name": speaker, "text": text})
             continue
         # "Name: ... " form
         m2 = re.match(r"^([A-Za-z0-9 _\-]+?):\s*(.*)$", ln)
@@ -110,13 +110,13 @@ def parse_simple_txt(path: str) -> List[Dict]:
                 tag = f"S{next_speaker_id}"
                 speakers_map[name] = tag
                 next_speaker_id += 1
-            parsed.append({"speaker": speakers_map[name], "text": text})
+            parsed.append({"speaker": speakers_map[name], "speaker_name": name, "text": text})
             continue
         # fallback: treat as continuation of previous speaker if any, else S1
         if parsed:
             parsed[-1]["text"] += " " + ln
         else:
-            parsed.append({"speaker": "S1", "text": ln})
+            parsed.append({"speaker": "S1", "speaker_name": "S1", "text": ln})
     return parsed
 
 
@@ -294,8 +294,6 @@ def chunk_to_5_10s(lines: List[Dict]) -> List[str]:
         ln = lines[i]
         sline = (
             f"[{ln['speaker']}] {ln['text']}"
-            if not ln["text"].startswith(f"[{ln['speaker']}]")
-            else ln["text"]
         )
         sec = estimate_seconds_for_text(ln["text"])
         # if single line longer than 10s: split crude by sentence punctuation

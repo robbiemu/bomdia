@@ -45,11 +45,11 @@ dia_compute_dtype = "float16"
 
 # LiteLLM model specification
 # Format: "provider/model-name" or "provider/model-name@provider"
-llm_spec = "openai/gpt-4o-mini"
+llm_spec = "cerebras/llama-4-scout-17b-16e-instruct"
 
 # Model parameters for LLM
 [model.parameters]
-temperature = 0.5
+temperature = 1
 max_tokens = 150
 top_p = 0.9
 frequency_penalty = 0.0
@@ -58,7 +58,7 @@ presence_penalty = 0.0
 # Dia TTS generation parameters
 [model.dia_generate_params]
 max_tokens = 3072
-cfg_scale = 3.0
+cfg_scale = 4.5
 temperature = 1.2
 top_p = 0.95
 cfg_filter_top_k = 45
@@ -95,7 +95,7 @@ context_window = 2
 pause_placeholder = "[insert-verbal-tag-for-pause]"
 
 # Maximum rate of verbal tag insertion (0.0-1.0)
-max_tag_rate = 0.15
+max_tag_rate = 0.25
 
 # Average words per second for audio estimation
 avg_wps = 2.5
@@ -113,7 +113,7 @@ The `[director_agent.rate_control]` section configures the token bucket algorith
 ```toml
 [director_agent.rate_control]
 # The target ratio of lines that should receive a new verbal tag (e.g., 0.10 for 10%).
-target_tag_rate = 0.10
+target_tag_rate = 0.16
 
 # The maximum number of "burst" tags the agent can inject above its target rate.
 # This allows it to handle emotionally dense scenes.
@@ -272,9 +272,14 @@ The Director agent uses these prompts to analyze the script and guide the Actor.
 
 ```toml
 [director_agent]
+# System prompt for Director role – used across all Director tasks
+system_prompt = """Reasoning: high
+You are a script director. You analyze scripts, define narrative moments, and review actor performances to create the final approved version. You respond with structured formats when specified and provide clear direction.
+"""
+
 # Prompt for the Director's initial, one-time analysis of the entire script.
 global_summary_prompt = """
-You are a script analyst. Read the entire following transcript and provide a concise summary covering three key areas. This summary will be used to guide another AI in performing the dialogue, so clarity and insight are crucial.
+Working as the script analyst, read the entire following transcript and provide a concise summary covering three key areas. This summary will be used to guide another AI in performing the dialogue, so clarity and insight are crucial.
 
 1.  **Overall Topic:** What is the main subject of the conversation?
 2.  **Speaker Relationship:** Describe the dynamic between the speakers (e.g., friendly colleagues, confrontational rivals, interviewer and subject).
@@ -286,92 +291,88 @@ Here is the transcript:
 ---
 """
 
-# Unified prompt for the Director to get a quick analysis of a specific moment.
-unified_moment_analysis_prompt = """
-You are an acting coach providing a quick note. Analyze this brief exchange, focusing ONLY on the speaker of the 'Current Line'.
-
-Return a JSON object with two keys:
-- "moment_summary": A third-person analysis of the speaker's emotional state and intention.
-- "directors_note": A first-person, actionable command for the Actor.
-
-**Exchange:**
-{local_context}
-
-**Current Line:**
-{current_line}
-"""
-
-# Prompt for the Director to define narrative moments in the script.
+# Prompt to define narrative moments.
 moment_definition_prompt = """
-You are a script director, preparing your notes for the next performance.
-
-The Previous Moment:
-You just completed a moment described as: "{last_moment_summary}".
-It concluded on line {last_moment_end_line} with the finalized performance: "{last_finalized_line_text}".
+You are preparing your notes for the next performance.
+{previous_moment_segment}
 
 Your Task:
-Now, analyze the upcoming script to define the next `current moment`. A `current moment` is a continuous, self-contained beat with a consistent emotional tone and narrative purpose.
+Analyze the upcoming script to define the **next `current moment`**. A `current moment` is a continuous, self-contained beat with a consistent emotional tone and narrative purpose. It starts at the first unassigned line and ends when the topic, intention, or emotional tone clearly shifts.
 
-A moment is defined by a consistent and unbroken:
-*   Topic: The characters are talking about the same immediate subject.
-*   Intention: A character is trying to achieve a single, specific goal.
-*   Emotional Tone: The underlying feeling is consistent.
-
-A moment ends when one of these characteristics clearly shifts.
-
-Examples:
-1. Single, Simple Moment:
-[S1] So, what did you think of the movie?
-[S2] Honestly, I thought it was a bit slow in the middle.
-[S1] Really? I loved the pacing. It felt deliberate.
-Start Line: 0, End Line: 2
-
-2. Two Distinct Moments:
-# Moment A Starts
-[S1] Okay, so the quarterly report is due Friday.
-[S2] Right. I've already finished the sales figures section.
-[S1] Perfect, I'll handle the marketing summary.
-# Moment A Ends, Moment B Starts
-[S2] Oh, by the way, did you see that email from HR about the new policy?
-[S1] No, what did it say?
-# Moment B Ends
-Moment A: Start Line: 0, End Line: 2
-Moment B: Start Line: 3, End Line: 4
-
-3. The "Pivot Line"
-A single line can be the end of one moment and the start of another. This is the most complex case.
-# Moment A (Party) Starts
-[S1] ...and that's why we're all so happy for you!
-[S2] To the happy couple!
-[EVERYONE] Happy birthday to you!  <-- PIVOT LINE
-# Moment A Ends, Moment B (Sadness) Starts
-[S3] (Hearing the song from a distance) That was her favorite song.
-[S4] I know. Let's get out of here.
-# Moment B Ends
-Moment A: Start Line: 0, End Line: 2
-Moment B: Start Line: 2, End Line: 4
-
-Upcoming Script (with line numbers):
+Upcoming Script (with global line numbers):
 ---
 {forward_script_slice_text}
 ---
 
 Your Direction:
-Please respond with a single JSON object that provides your complete direction for this next moment.
+Based on the script, identify the boundaries of the very next moment. Respond with a single JSON object that provides your complete direction.
 
 {
   "moment_summary": "Concise description of what is happening in this new moment. What is the core emotion and the characters' primary intentions?",
   "directors_notes": "Actionable notes for the actors. What should they be feeling or trying to achieve during this moment?",
   "start_line": {line_number},
-  "end_line": {line_number + 1}
+  "end_line": <The line number where this moment naturally concludes>
 }
 
 Respond with ONLY the JSON object, no other text.
 """
 
-# Note added when the tag quota has been exceeded
+previous_moment_template = """
+The Previous Moment:
+You just completed a moment described as: "{last_moment_summary}".
+It concluded on line {last_moment_end_line} with the finalized performance: "{last_finalized_line_text}".
+"""
+
 quota_exceeded_note = """
 (Automated message: The production's budget for verbal tags has been met. Do not add any new parenthetical tags.)
+"""
+
+# Prompt for the Director to review and finalize an Actor's performance for a moment.
+director_review_prompt = """
+Be meticulous in reviewing this take from a voice actor and prepare the final approved version of the script for the specific narrative moment, ensuring it adheres to a strict budget for new verbal tags. Slight wording changes may be permitted at your discretion, but omitted phrases or sentences must be restored.
+
+**CONTEXT**
+
+*   **Global Summary:** {global_summary}
+*   **Previous Moment Performance:** This is the finalized script from the moment that just concluded. It was about "{last_moment_summary}".
+    ---
+    {previous_moment_performance_text}
+    ---
+*   **Current Moment - Original Script:** This is the script before the Actor's performance.
+    ---
+    {original_script_text}
+    ---
+*   **Actor's Performance (Your 'Take' to Review):** This is the version submitted by the Actor, which may include new verbal tags.
+    ---
+    {actor_performance_text}
+    ---
+
+**YOUR DIRECTIVE**
+
+You have a budget to add a maximum of **{tag_budget}** new verbal tags for this entire moment.
+
+1.  **Review the Performance:** Compare the "Original Script" to the "Actor's Performance." Identify all the new parenthetical verbal tags (e.g., `(laughs)`, `(sighs)`) the Actor added.
+2.  **Enforce the Budget:**
+    *   If the number of new tags is **over budget**, you MUST revert some of the Actor's changes back to the original text until the budget is met. Preserve the most impactful and contextually motivated additions.
+    *   If the performance is **within budget**, you should approve it as-is, unless a change feels genuinely out of place or unmotivated.
+3.  **Editing Constraint:** Your editing is strictly limited. To construct the final script, you must decide for each line whether to **keep** the Actor's version or **revert** some or all of it to the original text, following these rules:
+    *   The placeholder `[insert-verbal-tag-for-pause]` is a technical directive and **must not** appear in the final text. If the Actor replaced it, you must keep their replacement or remove it. If the Actor's take contains a placeholder still, you must remove it.
+    *   If any lines or phrases were omitted, you must restore them (the actors may have smaller omissions or changes that may be kept at your discretion).
+    *   You **cannot** write new dialogue, add your own creative tags, or modify the text in any other way.
+
+**OUTPUT FORMAT**
+
+Respond with ONLY a JSON object that maps each line's global line number to its final, approved text. Return all the lines of the take after your edits.
+
+Example:
+{
+  "line_{start_line}": "Final text for the first line in the moment.",
+  "line_{start_line_plus_1}": "Final text for the second line, which may have been reverted to its original version."
+}
+
++**IMPORTANT:** The text you return for each line should NOT include the speaker name (e.g., `[{sample_name}]`). Return only the dialogue.
+
+Do not include any other text, explanations, or markdown formatting in your response.
 """
 ```
 
@@ -381,30 +382,14 @@ The Actor agent uses these prompt templates to perform its interpretation of lin
 
 ```toml
 [actor_agent]
-# Template for the Actor's main task. This will be formatted with context by the Director.
-task_directive_template = """
-You are a voice actor performing a line from a script. Your performance should be natural and enhance the written dialogue.
-
-**Context:**
-- **Global Summary:** {global_summary}
-- **Local Context (The lines immediately surrounding yours):**
-{local_context}
-- **Director's Interpretation of the Moment:** {moment_summary}
-- **Director's Notes:** {directors_notes}
-
-**Your Task:**
-Perform ONLY the following line:
-**Current Line:** {current_line}
-
-**Performance Rules:**
-1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally. Replace it with an appropriate verbal hesitation (e.g., "…um,", "--- hmm ---", "(sighs)"). If no verbalization feels right, you MUST replace it with a single space to connect the parts.
-2.  **Regarding New Verbal Tags:** You may add ONE short verbal tag (e.g., "(laughs)", "(gasps)") to the beginning of the line, but ONLY if it is strongly motivated by the emotional context. Do not add tags arbitrarily.
-3.  **Output:** Return ONLY the single, modified line of dialogue. Do not include the speaker tag (e.g., `[S1]`) or any commentary.
+# System prompt for Actor role – used across all Actor tasks
+system_prompt = """Reasoning: high
+You are a voice actor performing lines from a script. Your performance should be natural and enhance the written dialogue. Respond in structured JSON format.
 """
 
 # Template for the Actor's moment-based task.
 moment_task_directive_template = """
-You are a voice actor performing lines from a script. Your performance should be natural and enhance the written dialogue.
+Your performance should be natural and enhance the written dialogue.
 
 **Context:**
 - **Global Summary:** {global_summary}
@@ -413,18 +398,25 @@ You are a voice actor performing lines from a script. Your performance should be
 Perform the following lines as a cohesive moment:
 {moment_text}
 
+**Available Verbalizations:**
+- **For emotional expression:** You may add tags from the following list: {available_verbal_tags}
+- **For pauses/hesitations:** When replacing `[insert-verbal-tag-for-pause]`, you must use one of the emotional expressions, or one following: {available_line_combiners}
+
 **Performance Rules:**
-1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally. Replace it with an appropriate verbal hesitation (e.g., "…um,", "--- hmm ---", "(sighs)"). If no verbalization feels right, you MUST replace it with a single space to connect the parts.
-2.  **Regarding New Verbal Tags:** You may add ONE short verbal tag (e.g., "(laughs)", "(gasps)") to the beginning of a line, but ONLY if it is strongly motivated by the emotional context. Do not add tags arbitrarily.
-3.  **Token Budget:** You have approximately {token_budget:.1f} tokens available for your performance.
-{constraints_text}
+1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally by replacing it with an appropriate option from the list above. If no verbalization feels right, you MUST replace it with a single space to connect the parts.
+2.  **Regarding New Verbal Tags:**
+    *   You have a gentle budget of up to **{token_budget:.0f}** new verbal tags for the entire moment.
+    *   Sprinkle them wherever they make the dialogue breathe—no need to use the full allowance if the scene feels fine without them. Even serious or technical dialogue can include pauses, sighs, or chuckles that reveal the speaker's personality.
+    *   At most one new tag per line, please.
 
 **Output Format:**
-Respond with a JSON object that maps each line's global line number to its performed text:
+Respond with a JSON object mapping each line to its performed text, using the line's number for the key as shown in the example:
 {
-  "line_0": "Performed text for line 0",
-  "line_1": "Performed text for line 1"
+  "line_{start_line}": "Performed text for the first line in the moment",
+  "line_{start_line_plus_1}": "Performed text for the second line in the moment"
 }
+
++**IMPORTANT:** The text you return for each line should NOT include the speaker name (e.g., `[{sample_name}]`). Return only the dialogue.
 
 Make sure to return ONLY the JSON object, with no additional text or markdown formatting.
 """

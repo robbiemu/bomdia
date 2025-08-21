@@ -26,35 +26,47 @@ def test_synthetic_prompts_integration_basic(tmp_path, monkeypatch):
     # Create temporary output path
     output_path = tmp_path / "output.mp3"
 
-    # Track subprocess calls
+    # Track subprocess calls - only count calls to our generate_prompt module
     subprocess_calls = []
 
     def mock_subprocess_run(cmd, **kwargs):
-        subprocess_calls.append({"cmd": cmd, "kwargs": kwargs})
+        # Only track calls to our generate_prompt module, not file detection calls
+        if (
+            isinstance(cmd, list)
+            and len(cmd) > 2
+            and "-m" in cmd
+            and "generate_prompt" in cmd
+        ):
+            subprocess_calls.append(cmd)
 
-        # Mock successful worker script execution
-        result = MagicMock()
-        result.returncode = 0
-        result.stdout = json.dumps(
-            {
-                "speaker_id": cmd[cmd.index("--speaker-id") + 1],
-                "audio_path": (
-                    f"{tmp_path}/synthetic_prompts/"
-                    f"{cmd[cmd.index('--speaker-id') + 1]}_seed_12345.wav"
-                ),
-                "stdout_transcript": (
-                    f"[{cmd[cmd.index('--speaker-id') + 1]}] Dia is a state-of-the-art "
-                    "text-to-speech system designed for high-quality audio generation."
-                    "  This system can produce natural-sounding speech that captures "
-                    "the nuances of human voice patterns.  The technology behind it "
-                    "represents significant advances in neural audio synthesis, making "
-                    "it particularly effective for creating realistic voice clones "
-                    "from minimal input data."
-                ),
-            }
-        )
-        result.stderr = ""
-        return result
+            # Mock successful worker script execution
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = json.dumps(
+                {
+                    "speaker_id": cmd[cmd.index("--speaker-id") + 1],
+                    "audio_path": (
+                        f"{tmp_path}/synthetic_prompts/"
+                        f"{cmd[cmd.index('--speaker-id') + 1]}_seed_12345.wav"
+                    ),
+                    "stdout_transcript": (
+                        f"[{cmd[cmd.index('--speaker-id') + 1]}] Dia is a state-of-the-art "
+                        "text-to-speech system designed for high-quality audio generation."
+                        "  This system can produce natural-sounding speech that captures "
+                        "the nuances of human voice patterns.  The technology behind it "
+                        "represents significant advances in neural audio synthesis, making "
+                        "it particularly effective for creating realistic voice clones "
+                        "from minimal input data."
+                    ),
+                }
+            )
+            result.stderr = ""
+            return result
+        else:
+            # For other subprocess calls (like file detection), use the real implementation
+            import subprocess
+
+            return subprocess.run(cmd, **kwargs)
 
     # Mock the DiaTTS class for main pipeline
     class MockDiaTTS:
@@ -86,12 +98,23 @@ def test_synthetic_prompts_integration_basic(tmp_path, monkeypatch):
 
         def invoke(self, messages):
             class MockResponse:
-                content = "Topic: Conversation. Relationship: Friendly. Arc: Positive."
+                content = """{
+  "moment_summary": "Initial conversation between two speakers",
+  "directors_notes": "Keep the tone friendly and conversational",
+  "start_line": 0,
+  "end_line": 1
+}"""
 
             return MockResponse()
 
     def mock_perform_moment(
-        self, moment_id, lines, token_budget, constraints, global_summary
+        self,
+        moment_id,
+        lines,
+        token_budget,
+        constraints,
+        global_summary,
+        sample_name=None,
     ):
         result = {}
         for line in lines:
@@ -111,9 +134,9 @@ def test_synthetic_prompts_integration_basic(tmp_path, monkeypatch):
     )
 
     # Set config values for testing - patch the config as imported by pipeline module
-    monkeypatch.setattr("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", True)
+    monkeypatch.setattr("shared.config.config.GENERATE_SYNTHETIC_PROMPTS", True)
     monkeypatch.setattr(
-        "src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR",
+        "shared.config.config.GENERATE_PROMPT_OUTPUT_DIR",
         str(tmp_path / "synthetic_prompts"),
     )
 
@@ -130,17 +153,15 @@ def test_synthetic_prompts_integration_basic(tmp_path, monkeypatch):
 
     # Check that both speakers were processed
     called_speakers = set()
-    for call in subprocess_calls:
-        cmd = call["cmd"]
+    for cmd in subprocess_calls:
         speaker_idx = cmd.index("--speaker-id") + 1
         called_speakers.add(cmd[speaker_idx])
 
     assert called_speakers == {"S1", "S2"}
 
     # Verify command structure
-    for call in subprocess_calls:
-        cmd = call["cmd"]
-        assert "generate_prompt.py" in cmd[1] or "-m" in cmd[1]  # Script name
+    for cmd in subprocess_calls:
+        assert "-m" in cmd and "generate_prompt" in cmd  # Module name
         assert "--speaker-id" in cmd
         assert "--seed" in cmd
         assert "12345" in cmd
@@ -165,12 +186,24 @@ def test_synthetic_prompts_disabled(tmp_path, monkeypatch):
     subprocess_calls = []
 
     def mock_subprocess_run(cmd, **kwargs):
-        subprocess_calls.append(cmd)
-        return MagicMock(
-            returncode=0,
-            stdout='{"audio_path": "", "stdout_transcript": ""}',
-            stderr="",
-        )
+        # Only track calls to our generate_prompt module, not file detection calls
+        if (
+            isinstance(cmd, list)
+            and len(cmd) > 2
+            and "-m" in cmd
+            and "generate_prompt" in cmd
+        ):
+            subprocess_calls.append(cmd)
+            return MagicMock(
+                returncode=0,
+                stdout='{"audio_path": "", "stdout_transcript": ""}',
+                stderr="",
+            )
+        else:
+            # For other subprocess calls (like file detection), use the real implementation
+            import subprocess
+
+            return subprocess.run(cmd, **kwargs)
 
     # Mock components
     class MockDiaTTS:
@@ -200,12 +233,18 @@ def test_synthetic_prompts_disabled(tmp_path, monkeypatch):
 
         def invoke(self, messages):
             class MockResponse:
-                content = "Topic: Conversation."
+                content = '{"topic": "Conversation"}'
 
             return MockResponse()
 
     def mock_perform_moment(
-        self, moment_id, lines, token_budget, constraints, global_summary
+        self,
+        moment_id,
+        lines,
+        token_budget,
+        constraints,
+        global_summary,
+        sample_name=None,
     ):
         result = {}
         for line in lines:
@@ -223,7 +262,7 @@ def test_synthetic_prompts_disabled(tmp_path, monkeypatch):
         mock_perform_moment,
     )
     # Patch the config reference that pipeline.py imports and uses
-    monkeypatch.setattr("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", False)
+    monkeypatch.setattr("shared.config.config.GENERATE_SYNTHETIC_PROMPTS", False)
 
     # Run pipeline
     run_pipeline(
@@ -251,12 +290,24 @@ def test_synthetic_prompts_single_chunk_skip(tmp_path, monkeypatch):
     subprocess_calls = []
 
     def mock_subprocess_run(cmd, **kwargs):
-        subprocess_calls.append(cmd)
-        return MagicMock(
-            returncode=0,
-            stdout='{"audio_path": "", "stdout_transcript": ""}',
-            stderr="",
-        )
+        # Only track calls to our generate_prompt module, not file detection calls
+        if (
+            isinstance(cmd, list)
+            and len(cmd) > 2
+            and "-m" in cmd
+            and "generate_prompt" in cmd
+        ):
+            subprocess_calls.append(cmd)
+            return MagicMock(
+                returncode=0,
+                stdout='{"audio_path": "", "stdout_transcript": ""}',
+                stderr="",
+            )
+        else:
+            # For other subprocess calls (like file detection), use the real implementation
+            import subprocess
+
+            return subprocess.run(cmd, **kwargs)
 
     # Mock components (same as above)
     class MockDiaTTS:
@@ -286,12 +337,23 @@ def test_synthetic_prompts_single_chunk_skip(tmp_path, monkeypatch):
 
         def invoke(self, messages):
             class MockResponse:
-                content = "Topic: Brief conversation."
+                content = """{
+  "moment_summary": "Brief conversation between speakers",
+  "directors_notes": "Keep it short and simple",
+  "start_line": 0,
+  "end_line": 1
+}"""
 
             return MockResponse()
 
     def mock_perform_moment(
-        self, moment_id, lines, token_budget, constraints, global_summary
+        self,
+        moment_id,
+        lines,
+        token_budget,
+        constraints,
+        global_summary,
+        sample_name=None,
     ):
         result = {}
         for line in lines:
@@ -308,9 +370,9 @@ def test_synthetic_prompts_single_chunk_skip(tmp_path, monkeypatch):
         "src.components.verbal_tag_injector.actor.Actor.perform_moment",
         mock_perform_moment,
     )
-    monkeypatch.setattr("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", True)
+    monkeypatch.setattr("shared.config.config.GENERATE_SYNTHETIC_PROMPTS", True)
     monkeypatch.setattr(
-        "src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR",
+        "shared.config.config.GENERATE_PROMPT_OUTPUT_DIR",
         str(tmp_path / "synthetic_prompts"),
     )
 
@@ -346,23 +408,35 @@ def test_synthetic_prompts_with_existing_voice_prompts(tmp_path, monkeypatch):
     subprocess_calls = []
 
     def mock_subprocess_run(cmd, **kwargs):
-        subprocess_calls.append(cmd)
-        result = MagicMock()
-        result.returncode = 0
-        result.stdout = json.dumps(
-            {
-                "speaker_id": cmd[cmd.index("--speaker-id") + 1],
-                "audio_path": (
-                    f"{tmp_path}/synthetic_prompts/"
-                    f"{cmd[cmd.index('--speaker-id') + 1]}_seed_12345.wav"
-                ),
-                "stdout_transcript": (
-                    f"[{cmd[cmd.index('--speaker-id') + 1]}] Synthetic transcript"
-                ),
-            }
-        )
-        result.stderr = ""
-        return result
+        # Only track calls to our generate_prompt module, not file detection calls
+        if (
+            isinstance(cmd, list)
+            and len(cmd) > 2
+            and "-m" in cmd
+            and "generate_prompt" in cmd
+        ):
+            subprocess_calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = json.dumps(
+                {
+                    "speaker_id": cmd[cmd.index("--speaker-id") + 1],
+                    "audio_path": (
+                        f"{tmp_path}/synthetic_prompts/"
+                        f"{cmd[cmd.index('--speaker-id') + 1]}_seed_12345.wav"
+                    ),
+                    "stdout_transcript": (
+                        f"[{cmd[cmd.index('--speaker-id') + 1]}] Synthetic transcript"
+                    ),
+                }
+            )
+            result.stderr = ""
+            return result
+        else:
+            # For other subprocess calls (like file detection), use the real implementation
+            import subprocess
+
+            return subprocess.run(cmd, **kwargs)
 
     # Mock components
     class MockDiaTTS:
@@ -391,13 +465,68 @@ def test_synthetic_prompts_with_existing_voice_prompts(tmp_path, monkeypatch):
             pass
 
         def invoke(self, messages):
+            # Check what type of call this is based on the message content
+            message_content = ""
+            if isinstance(messages, list) and len(messages) > 0:
+                message_content = (
+                    str(messages[-1].get("content", ""))
+                    if isinstance(messages[-1], dict)
+                    else str(messages[-1])
+                )
+            elif hasattr(messages, "content"):
+                message_content = str(messages.content)
+            else:
+                message_content = str(messages)
+
             class MockResponse:
-                content = "Topic: Mixed prompts conversation."
+                if (
+                    "moment" in message_content.lower()
+                    and "define" in message_content.lower()
+                ):
+                    # Director moment definition call
+                    content = """{
+  "moment_summary": "Conversation with mixed prompts",
+  "directors_notes": "Handle both speakers appropriately",
+  "start_line": 0,
+  "end_line": 1
+}"""
+                elif (
+                    "actor" in message_content.lower()
+                    and "perform" in message_content.lower()
+                ):
+                    # Actor performance call
+                    content = """{
+  "line_0": "[S1] Hello, I have a voice prompt already.",
+  "line_1": "[S2] But I don't have one, so I need a synthetic prompt."
+}"""
+                elif (
+                    "review" in message_content.lower()
+                    and "final" in message_content.lower()
+                ):
+                    # Director review call
+                    content = """{
+  "line_0": "[S1] Hello, I have a voice prompt already.",
+  "line_1": "[S2] But I don't have one, so I need a synthetic prompt."
+}"""
+                else:
+                    # Default fallback
+                    content = """{
+  "moment_summary": "Conversation with mixed prompts",
+  "directors_notes": "Handle both speakers appropriately",
+  "start_line": 0,
+  "end_line": 1
+}"""
 
             return MockResponse()
 
     def mock_perform_moment(
-        self, moment_id, lines, token_budget, constraints, global_summary
+        self,
+        moment_id,
+        lines,
+        token_budget,
+        constraints,
+        global_summary,
+        sample_name=None,
     ):
         result = {}
         for line in lines:
@@ -414,9 +543,9 @@ def test_synthetic_prompts_with_existing_voice_prompts(tmp_path, monkeypatch):
         "src.components.verbal_tag_injector.actor.Actor.perform_moment",
         mock_perform_moment,
     )
-    monkeypatch.setattr("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", True)
+    monkeypatch.setattr("shared.config.config.GENERATE_SYNTHETIC_PROMPTS", True)
     monkeypatch.setattr(
-        "src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR",
+        "shared.config.config.GENERATE_PROMPT_OUTPUT_DIR",
         str(tmp_path / "synthetic_prompts"),
     )
 
@@ -489,19 +618,24 @@ def test_synthetic_prompts_worker_failure(tmp_path, monkeypatch):
 
         def invoke(self, messages):
             class MockResponse:
-                content = "Topic: Failure test."
+                content = "This is not valid JSON at all!"
 
             return MockResponse()
 
     def mock_perform_moment(
-        self, moment_id, lines, token_budget, constraints, global_summary
+        self,
+        moment_id,
+        lines,
+        token_budget,
+        constraints,
+        global_summary,
+        sample_name=None,
     ):
         result = {}
         for line in lines:
             result[line["global_line_number"]] = line
         return result
 
-    # Apply mocks
     monkeypatch.setattr("subprocess.run", mock_subprocess_run)
     monkeypatch.setattr(
         "src.components.verbal_tag_injector.director.LiteLLMInvoker", MockLLMInvoker
@@ -510,9 +644,9 @@ def test_synthetic_prompts_worker_failure(tmp_path, monkeypatch):
         "src.components.verbal_tag_injector.actor.Actor.perform_moment",
         mock_perform_moment,
     )
-    monkeypatch.setattr("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", True)
+    monkeypatch.setattr("shared.config.config.GENERATE_SYNTHETIC_PROMPTS", True)
     monkeypatch.setattr(
-        "src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR",
+        "shared.config.config.GENERATE_PROMPT_OUTPUT_DIR",
         str(tmp_path / "synthetic_prompts"),
     )
 
@@ -575,12 +709,18 @@ def test_synthetic_prompts_json_parsing_failure(tmp_path, monkeypatch):
 
         def invoke(self, messages):
             class MockResponse:
-                content = "Topic: JSON failure test."
+                content = "This is not valid JSON at all!"
 
             return MockResponse()
 
     def mock_perform_moment(
-        self, moment_id, lines, token_budget, constraints, global_summary
+        self,
+        moment_id,
+        lines,
+        token_budget,
+        constraints,
+        global_summary,
+        sample_name=None,
     ):
         result = {}
         for line in lines:
@@ -596,9 +736,9 @@ def test_synthetic_prompts_json_parsing_failure(tmp_path, monkeypatch):
         "src.components.verbal_tag_injector.actor.Actor.perform_moment",
         mock_perform_moment,
     )
-    monkeypatch.setattr("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", True)
+    monkeypatch.setattr("shared.config.config.GENERATE_SYNTHETIC_PROMPTS", True)
     monkeypatch.setattr(
-        "src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR",
+        "shared.config.config.GENERATE_PROMPT_OUTPUT_DIR",
         str(tmp_path / "synthetic_prompts"),
     )
 
@@ -629,23 +769,35 @@ def test_synthetic_prompts_seed_handling(tmp_path, monkeypatch):
     subprocess_calls = []
 
     def mock_subprocess_run(cmd, **kwargs):
-        subprocess_calls.append(cmd)
-        result = MagicMock()
-        result.returncode = 0
-        result.stdout = json.dumps(
-            {
-                "speaker_id": cmd[cmd.index("--speaker-id") + 1],
-                "audio_path": (
-                    f"{tmp_path}/synthetic_prompts/"
-                    f"{cmd[cmd.index('--speaker-id') + 1]}_seed_99999.wav"
-                ),
-                "stdout_transcript": (
-                    f"[{cmd[cmd.index('--speaker-id') + 1]}] Synthetic transcript"
-                ),
-            }
-        )
-        result.stderr = ""
-        return result
+        # Only track calls to our generate_prompt module, not file detection calls
+        if (
+            isinstance(cmd, list)
+            and len(cmd) > 2
+            and "-m" in cmd
+            and "generate_prompt" in cmd
+        ):
+            subprocess_calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = json.dumps(
+                {
+                    "speaker_id": cmd[cmd.index("--speaker-id") + 1],
+                    "audio_path": (
+                        f"{tmp_path}/synthetic_prompts/"
+                        f"{cmd[cmd.index('--speaker-id') + 1]}_seed_99999.wav"
+                    ),
+                    "stdout_transcript": (
+                        f"[{cmd[cmd.index('--speaker-id') + 1]}] Synthetic transcript"
+                    ),
+                }
+            )
+            result.stderr = ""
+            return result
+        else:
+            # For other subprocess calls (like file detection), use the real implementation
+            import subprocess
+
+            return subprocess.run(cmd, **kwargs)
 
     # Mock components
     class MockDiaTTS:
@@ -675,12 +827,23 @@ def test_synthetic_prompts_seed_handling(tmp_path, monkeypatch):
 
         def invoke(self, messages):
             class MockResponse:
-                content = "Topic: Seed test."
+                content = """{
+  "moment_summary": "Testing seed handling",
+  "directors_notes": "Handle seed parameter correctly",
+  "start_line": 0,
+  "end_line": 1
+}"""
 
             return MockResponse()
 
     def mock_perform_moment(
-        self, moment_id, lines, token_budget, constraints, global_summary
+        self,
+        moment_id,
+        lines,
+        token_budget,
+        constraints,
+        global_summary,
+        sample_name=None,
     ):
         result = {}
         for line in lines:
@@ -697,9 +860,9 @@ def test_synthetic_prompts_seed_handling(tmp_path, monkeypatch):
         "src.components.verbal_tag_injector.actor.Actor.perform_moment",
         mock_perform_moment,
     )
-    monkeypatch.setattr("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", True)
+    monkeypatch.setattr("shared.config.config.GENERATE_SYNTHETIC_PROMPTS", True)
     monkeypatch.setattr(
-        "src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR",
+        "shared.config.config.GENERATE_PROMPT_OUTPUT_DIR",
         str(tmp_path / "synthetic_prompts"),
     )
 
@@ -731,26 +894,40 @@ def test_synthetic_prompts_output_dir_creation(tmp_path, monkeypatch):
 
     output_path = tmp_path / "output.mp3"
     synthetic_prompts_dir = tmp_path / "synthetic_prompts_test_dir"
+    subprocess_calls = []
 
     def mock_subprocess_run(cmd, **kwargs):
-        # Create the directory if it doesn't exist
-        os.makedirs(synthetic_prompts_dir, exist_ok=True)
-        result = MagicMock()
-        result.returncode = 0
-        result.stdout = json.dumps(
-            {
-                "speaker_id": cmd[cmd.index("--speaker-id") + 1],
-                "audio_path": (
-                    f"{synthetic_prompts_dir}/"
-                    f"{cmd[cmd.index('--speaker-id') + 1]}_seed_12345.wav"
-                ),
-                "stdout_transcript": (
-                    f"[{cmd[cmd.index('--speaker-id') + 1]}] Synthetic transcript"
-                ),
-            }
-        )
-        result.stderr = ""
-        return result
+        # Only track calls to our generate_prompt module, not file detection calls
+        if (
+            isinstance(cmd, list)
+            and len(cmd) > 2
+            and "-m" in cmd
+            and "generate_prompt" in cmd
+        ):
+            subprocess_calls.append(cmd)
+            # Create the directory if it doesn't exist
+            os.makedirs(synthetic_prompts_dir, exist_ok=True)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = json.dumps(
+                {
+                    "speaker_id": cmd[cmd.index("--speaker-id") + 1],
+                    "audio_path": (
+                        f"{synthetic_prompts_dir}/"
+                        f"{cmd[cmd.index('--speaker-id') + 1]}_seed_12345.wav"
+                    ),
+                    "stdout_transcript": (
+                        f"[{cmd[cmd.index('--speaker-id') + 1]}] Synthetic transcript"
+                    ),
+                }
+            )
+            result.stderr = ""
+            return result
+        else:
+            # For other subprocess calls (like file detection), use the real implementation
+            import subprocess
+
+            return subprocess.run(cmd, **kwargs)
 
     # Mock components
     class MockDiaTTS:
@@ -779,13 +956,68 @@ def test_synthetic_prompts_output_dir_creation(tmp_path, monkeypatch):
             pass
 
         def invoke(self, messages):
+            # Check what type of call this is based on the message content
+            message_content = ""
+            if isinstance(messages, list) and len(messages) > 0:
+                message_content = (
+                    str(messages[-1].get("content", ""))
+                    if isinstance(messages[-1], dict)
+                    else str(messages[-1])
+                )
+            elif hasattr(messages, "content"):
+                message_content = str(messages.content)
+            else:
+                message_content = str(messages)
+
             class MockResponse:
-                content = "Topic: Output dir test."
+                if (
+                    "moment" in message_content.lower()
+                    and "define" in message_content.lower()
+                ):
+                    # Director moment definition call
+                    content = """{
+  "moment_summary": "Testing output directory creation",
+  "directors_notes": "Ensure directory is created",
+  "start_line": 0,
+  "end_line": 1
+}"""
+                elif (
+                    "actor" in message_content.lower()
+                    and "perform" in message_content.lower()
+                ):
+                    # Actor performance call
+                    content = """{
+  "line_0": "[S1] Testing output directory creation.",
+  "line_1": "[S2] The directory should be created if it doesn't exist."
+}"""
+                elif (
+                    "review" in message_content.lower()
+                    and "final" in message_content.lower()
+                ):
+                    # Director review call
+                    content = """{
+  "line_0": "[S1] Testing output directory creation.",
+  "line_1": "[S2] The directory should be created if it doesn't exist."
+}"""
+                else:
+                    # Default fallback
+                    content = """{
+  "moment_summary": "Testing output directory creation",
+  "directors_notes": "Ensure directory is created",
+  "start_line": 0,
+  "end_line": 1
+}"""
 
             return MockResponse()
 
     def mock_perform_moment(
-        self, moment_id, lines, token_budget, constraints, global_summary
+        self,
+        moment_id,
+        lines,
+        token_budget,
+        constraints,
+        global_summary,
+        sample_name=None,
     ):
         result = {}
         for line in lines:
@@ -802,9 +1034,9 @@ def test_synthetic_prompts_output_dir_creation(tmp_path, monkeypatch):
         "src.components.verbal_tag_injector.actor.Actor.perform_moment",
         mock_perform_moment,
     )
-    monkeypatch.setattr("src.pipeline.config.GENERATE_SYNTHETIC_PROMPTS", True)
+    monkeypatch.setattr("shared.config.config.GENERATE_SYNTHETIC_PROMPTS", True)
     monkeypatch.setattr(
-        "src.pipeline.config.GENERATE_PROMPT_OUTPUT_DIR", str(synthetic_prompts_dir)
+        "shared.config.config.GENERATE_PROMPT_OUTPUT_DIR", str(synthetic_prompts_dir)
     )
 
     # Ensure directory does not exist before running
@@ -816,5 +1048,6 @@ def test_synthetic_prompts_output_dir_creation(tmp_path, monkeypatch):
     )
 
     # Verify directory was created
+    assert len(subprocess_calls) == 2
     assert synthetic_prompts_dir.exists()
     assert synthetic_prompts_dir.is_dir()

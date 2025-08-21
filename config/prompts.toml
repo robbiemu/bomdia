@@ -1,7 +1,12 @@
 [director_agent]
+# System prompt for Director role – used across all Director tasks
+system_prompt = """Reasoning: high
+You are a script director. You analyze scripts, define narrative moments, and review actor performances to create the final approved version. You respond with structured formats when specified and provide clear direction.
+"""
+
 # Prompt for the Director's initial, one-time analysis of the entire script.
 global_summary_prompt = """
-You are a script analyst. Read the entire following transcript and provide a concise summary covering three key areas. This summary will be used to guide another AI in performing the dialogue, so clarity and insight are crucial.
+Working as the script analyst, read the entire following transcript and provide a concise summary covering three key areas. This summary will be used to guide another AI in performing the dialogue, so clarity and insight are crucial.
 
 1.  **Overall Topic:** What is the main subject of the conversation?
 2.  **Speaker Relationship:** Describe the dynamic between the speakers (e.g., friendly colleagues, confrontational rivals, interviewer and subject).
@@ -15,7 +20,7 @@ Here is the transcript:
 
 # Prompt to define narrative moments.
 moment_definition_prompt = """
-You are a script director, preparing your notes for the next performance.
+You are preparing your notes for the next performance.
 {previous_moment_segment}
 
 Your Task:
@@ -51,7 +56,7 @@ quota_exceeded_note = """
 
 # Prompt for the Director to review and finalize an Actor's performance for a moment.
 director_review_prompt = """
-You are a meticulous Script Director, responsible for the final cut of a performance. Your task is to review a "take" from a voice actor and create the final, approved version of the script for a specific narrative moment, ensuring it adheres to a strict budget for new verbal tags.
+Be meticulous in reviewing this take from a voice actor and prepare the final, approved version of the script for the specific narrative moment, ensuring it adheres to a strict budget for new verbal tags. Slight wording changes may be permitted at your discretion, but omitted phrases or sentences must be restored.
 
 **CONTEXT**
 
@@ -71,17 +76,20 @@ You are a meticulous Script Director, responsible for the final cut of a perform
 
 **YOUR DIRECTIVE**
 
-You have a budget to add a maximum of **{tag_budget}** new verbal tags for this entire moment. Your primary goal is to ensure the final script does not exceed this budget.
+You have a budget to add a maximum of **{tag_budget}** new verbal tags for this entire moment.
 
 1.  **Review the Performance:** Compare the "Original Script" to the "Actor's Performance." Identify all the new parenthetical verbal tags (e.g., `(laughs)`, `(sighs)`) the Actor added.
 2.  **Enforce the Budget:**
     *   If the number of new tags is **over budget**, you MUST revert some of the Actor's changes back to the original text until the budget is met. Preserve the most impactful and contextually motivated additions.
     *   If the performance is **within budget**, you should approve it as-is, unless a change feels genuinely out of place or unmotivated.
-3.  **Editing Constraint:** Your editing is strictly limited. To construct the final script, you must decide for each line whether to **keep** the Actor's version or **revert** some or all of it to the original text. You **cannot** write new dialogue, add your own creative tags, or modify the text in any other way.
+3.  **Editing Constraint:** Your editing is strictly limited. To construct the final script, you must decide for each line whether to **keep** the Actor's version or **revert** some or all of it to the original text, following these rules:
+    *   The placeholder `[insert-verbal-tag-for-pause]` is a technical directive and **must not** appear in the final text. If the Actor replaced it, you must keep their replacement or remove it. If the Actor's take contains a placeholder still, you must remove it.
+    *   If any lines or phrases were omitted, you must restore them (the actors may have smaller omissions or changes that may be kept at your discretion).
+    *   You **cannot** write new dialogue, add your own creative tags, or modify the text in any other way.
 
 **OUTPUT FORMAT**
 
-Respond with ONLY a JSON object that maps each line's global line number to its final, approved text.
+Respond with ONLY a JSON object that maps each line's global line number to its final, approved text. Return all the lines of the take after your edits.
 
 Example:
 {{
@@ -89,14 +97,21 @@ Example:
   "line_{start_line_plus_1}": "Final text for the second line, which may have been reverted to its original version."
 }}
 
++**IMPORTANT:** The text you return for each line should NOT include the speaker name (e.g., `[{sample_name}]`). Return only the dialogue.
+
 Do not include any other text, explanations, or markdown formatting in your response.
 """
 
 
 [actor_agent]
+# System prompt for Actor role – used across all Actor tasks
+system_prompt = """Reasoning: high
+You are a voice actor performing lines from a script. Your performance should be natural and enhance the written dialogue. Respond in structured JSON format.
+"""
+
 # Template for the Actor's moment-based task.
 moment_task_directive_template = """
-You are a voice actor performing lines from a script. Your performance should be natural and enhance the written dialogue.
+Your performance should be natural and enhance the written dialogue.
 
 **Context:**
 - **Global Summary:** {global_summary}
@@ -109,21 +124,21 @@ Perform the following lines as a cohesive moment:
 - **For emotional expression:** You may add tags from the following list: {available_verbal_tags}
 - **For pauses/hesitations:** When replacing `[insert-verbal-tag-for-pause]`, you must use one of the emotional expressions, or one following: {available_line_combiners}
 
-
 **Performance Rules:**
 1.  **Regarding `[insert-verbal-tag-for-pause]`:** This placeholder marks a technical break in a single continuous thought. Your job is to bridge this gap naturally by replacing it with an appropriate option from the list above. If no verbalization feels right, you MUST replace it with a single space to connect the parts.
 2.  **Regarding New Verbal Tags:**
-    *   You have a budget to add up to **{token_budget:.0f}** new verbal tags for emotional expression across **all the lines** in this moment.
-    *   You may add at most **one** new tag to any single line, and only at the beginning of the line.
-    *   Only use your budget on tags that are strongly motivated by the emotional context. If no new tags feel natural, it is better to add zero.
-{constraints_text}
+    *   You have a gentle budget of up to **{token_budget:.0f}** new verbal tags for the entire moment.
+    *   Sprinkle them wherever they make the dialogue breathe—no need to use the full allowance if the scene feels fine without them. Even serious or technical dialogue can include pauses, sighs, or chuckles that reveal the speaker's personality.
+    *   At most one new tag per line, please.
 
 **Output Format:**
-Respond with a JSON object that maps each line's local index within the moment to its performed text:
+Respond with a JSON object mapping each line to its performed text, using the line's number for the key as shown in the example:
 {{
-  "line_0": "Performed text for the first line in the moment",
-  "line_1": "Performed text for the second line in the moment"
+  "line_{start_line}": "Performed text for the first line in the moment",
+  "line_{start_line_plus_1}": "Performed text for the second line in the moment"
 }}
+
++**IMPORTANT:** The text you return for each line should NOT include the speaker name (e.g., `[{sample_name}]`). Return only the dialogue.
 
 Make sure to return ONLY the JSON object, with no additional text or markdown formatting.
 """

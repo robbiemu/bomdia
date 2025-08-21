@@ -36,6 +36,7 @@ def test_actor_perform_moment(mock_config, mock_llm_invoker, sample_lines):
         token_budget=10.0,
         constraints={},
         global_summary="A global summary.",
+        sample_name="S1",
     )
 
     mock_llm_invoker.invoke.assert_called_once()
@@ -76,6 +77,7 @@ def test_actor_perform_moment_with_constraints(
         token_budget=10.0,
         constraints=constraints,
         global_summary="A global summary.",
+        sample_name="S1",
     )
 
     mock_llm_invoker.invoke.assert_called_once()

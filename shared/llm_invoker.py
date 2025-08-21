@@ -4,6 +4,28 @@ from typing import Any, Dict, List
 
 import litellm
 
+# Try to import the traceable decorator. If langsmith is not installed,
+# create a dummy decorator that does nothing.
+try:
+    from langsmith import traceable
+
+    from .litellm_callbacks import setup_litellm_callbacks
+
+    # set up LangSmith tracing with litellm
+    setup_litellm_callbacks()
+except ImportError:
+    # This function is a placeholder that mimics the @traceable decorator.
+    # It takes the same arguments but returns a simple wrapper that just
+    # returns the original function, effectively doing nothing.
+    def dummy_traceable(*_args: Any, **_kwargs: Any) -> Any:
+        def wrapper(func: Any) -> Any:
+            return func
+
+        return wrapper
+
+    traceable = dummy_traceable
+
+
 # Initialize logger
 logger = logging.getLogger(__name__)
 
@@ -35,6 +57,7 @@ class LiteLLMInvoker:
         self.model = model
         self.default_params = kwargs
 
+    @traceable(run_type="llm")
     def invoke(self, messages: List[Dict[str, str]]) -> LLMResponse:
         """
         Invokes the LLM with a list of messages and returns a standardized response.
