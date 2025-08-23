@@ -1,0 +1,115 @@
+Alex: Welcome to the show. I'm Alex, and today I'm here with Robbie, who's been working on something that's been quietly taking shape in his terminal for the past few weeks. Robbie, why don't you tell us what you've built.
+
+Robbie: It's called bomdia. It's a command-line tool that takes text transcripts and turns them into podcasts.
+
+Alex: That's a deceptively simple description. What's the actual problem it solves?
+
+Robbie: I have this other project I've been documenting in Obsidian. Forty thousand words of it. Well organized, but completely unusable as audio. I tried the usual AI podcast tools, but they kept getting details wrong about my architecture, my dependencies. Things that aren't true, and there's no way to correct them.
+
+Alex: So you built something that lets you control what gets said.
+
+Robbie: Exactly. You write the conversation yourself - just plain text with speaker labels like S1 and S2. Then bomdia analyzes the emotional flow, identifies natural moments where verbal tags should go, and adds them. Laughs, pauses, the things that make it sound like two people actually talking.
+
+Alex: The moments you mentioned - what makes a moment?
+
+Robbie: Continuous beats where the topic or emotion stays consistent. When that shifts, that's where a moment ends. The system identifies these boundaries, then performs the text within them with appropriate verbal seasoning.
+
+Alex: So you couldn't just feed your exact knowledge into the existing tools?
+
+Robbie: NotebookLM is actually excellent at what it does - it takes source material and figures out a script when you don't have one. But I had the opposite problem. I'd spent months building vault-MCP, documenting every architectural decision in Obsidian. I knew exactly what needed to be said, down to the specific dependencies and implementation choices.
+
+Alex: You had too much knowledge, not too little.
+
+Robbie: Exactly. Well - so, NotebookLM was doing its job - synthesizing information, making educated guesses about what listeners should know. But it couldn't know that I needed to mention the specific MCP protocol version, or why I chose not to use Rust for the server component. Those details mattered, and I couldn't inject them.
+
+Alex: So the gap wasn't in NotebookLM's capability, it was in the workflow.
+
+Robbie: Right. When you deeply understand your subject, you don't want an AI to discover the script for you. You want it to perform the script you've already written, with all the nuance and specificity that only you know.
+
+Alex: So what does your workflow actually solve that wasn't possible before?
+
+Robbie: It flips the problem. Instead of AI discovering what to say, it focuses on how to say it. You write the conversation you want - every technical detail, every explanation, every joke - and bomdia makes it sound like two people talking through it together.
+
+Alex: The value proposition being...
+
+Robbie: Precision with personality. You get to keep all your hard-won knowledge intact, but present it as a natural conversation.
+
+Alex: So someone could take their deeply technical documentation and...
+
+Robbie: And turn it into a podcast that sounds like two experts chatting about it over coffee, without losing the important details.
+
+Alex: Alright, well. Give me the three core features in one breath.
+
+Robbie: Moment-based emotional pacing, token-bucket-controlled verbal-tag injection, and LiteLLM-powered provider-agnostic LLM calls so you can swap in whatever model you already have an API key for.
+
+Alex: Walk me through how this actually works. You’ve got a transcript—what happens next?
+
+Robbie: First, the Director agent reads the whole thing and builds a global summary: topic, speaker relationship, emotional arc. Then it carves the script into moments—continuous beats with one tone and one intention.
+
+Alex: How big is a moment?
+
+Robbie: Could be three lines, could be thirty. It ends when the topic shifts, the goal changes, or the emotion turns. Each moment gets a director’s note: Like “they’re excited but hesitant,” “this is where the reveal lands.”
+
+Alex: And the Actor?
+
+Robbie: Takes the moment, the note, and a token budget. It rewrites the lines, drops in verbal tags—laughs, pauses, the occasional “um”—but only where the context justifies it. The algorithm caps the rate so it never feels over-produced.
+
+Alex: After the Actor finishes, what stops it from going overboard?
+
+Robbie: The Director gets a second pass. It looks at the performed moment, counts the verbal tags, and checks against the budget. If the Actor got carried away, the Director trims back to the limit in the bucket — I imagine it usually is just removing the least motivated tag or replacing two weak ones with a single stronger pause.
+
+Alex: So it's not just one-way.
+
+Robbie: Exactly. Director defines the moment, Actor performs it, Director approves or reins it in. Only then does the system move to chunking.
+
+Alex: Chunking comes after approval?
+
+Robbie: Yes. Once the verbal tags are locked and within budget, the script gets sliced into five-to-ten-second blocks. Each chunk is a contiguous bit of dialogue that Dia can render without running out of GPU memory, then stitched together with pydub.
+
+Robbie: At that point I ran into an annoying detail. Even a twenty-line script would let the second speaker’s voice drift between slices. It needs a short seed clip at the start of every chunk. Otherwise the timbre wandered when rendering the audio, from chunk to chunk.
+
+Alex: That’d kill the illusion fast.
+
+Robbie: Exactly. So I carved out a little worker script, generate_prompt. It runs once per unprompted speaker, spits out a deterministic dot-wav and a companion text transcript. It caches them, combines them appropriately for each chunk, and every chunk just reuses one of the same combined clips.
+
+Alex: What do you mean "combines them"?
+
+Robbie: Its just the ordering. In every chunk, Dia likes each voice to happen like a dialog, so not two lines from the same speaker. You have to order it by who speaks first. That way voices stay locked. And nobody has to think about it.
+
+Alex: So what's actually under the hood? What did you build this with?
+
+Robbie: Python 3.10, locked tight because Dia and its dependencies are picky. LangGraph orchestrates the agent loop—Director and Actor run as separate nodes with shared state. LiteLLM sits in the middle so you can point at OpenAI today, Ollama tomorrow, or something else next week just by changing one line in the config.
+
+Alex: Any big hurdles you had to clear?
+
+Robbie: Two. First, Dia itself: it ships assuming PyTorch 2.6, but the ecosystem had already moved to 2.8. I had to patch the model’s forward pass to avoid a dtype call that doesn’t exist anymore. Second, memory—Dia can eat ten gigabytes on a single long sentence, so I wrote a greedy chunker that keeps every block under Dia’s token cap without breaking mid-thought.
+
+Alex: And the prompts?
+
+Robbie: Hardest part. Early drafts had the Actor improvising dialogue; the result was confident nonsense. Switching to a moment-by-moment rehearsal, with strict instructions to keep every original word, fixed it. Took more prompt engineering than actual code.
+
+Alex: What turned out to be the real headache?
+
+Robbie: Migrating from line-by-line to moment-to-moment rehearsals. I started with an easy linear injector — just count lines, sprinkle in some tags. When I moved to moments, the bucket had to span multiple lines but still keep the same overall density. I rewrote it three times: first treating each moment as a single line, then trying to pre-chunk and slice moments inside chunks, before realizing chunking already happened downstream. Refactoring the token-bucket logic had to happen at the same time. The fix was to track cumulative line count per moment, adjust the bucket rate dynamically, and add a second prompt pass that describes each moment so the Director knows how many tags it can afford to spend.
+
+Alex: So what’s next for bomdia?
+
+Robbie: Right now it’s a usable prototype. First priority is hardening — mostly that is just better prompting logic and error-handling. There's also some nits to pick in places, like I think we are dividing hte moments with a forward look that is not as large as it should be, so we might get better direction from that agent if we refine what goes in to the prompt for that. And we need to add a dry-run option that just produces the transcript conformed to Dia TTS after rehearsals. After that, modularize the TTS layer so Dia can be swapped for another model or even an MLX build of Dia. Same interface, different engine.
+
+Alex: And beyond that?
+
+Robbie: I need to deide if I'm going to migrate back to match the Dia's current torch dependencies, or leave it so they update it. That's related to Dia's descript dependency.
+
+Robbie: Oh, and file formats, like for subtitles, maybe. Oh and thinking through multiple actors: you can only voice two actors in any 5 to 10 second block with Dia, but there's nothing saying you couldn't have more actors throughout the script. But honestly it does its job. It solves the exact problem I had: turn precise, technical transcripts into natural two-person audio without losing a single detail.
+
+Alex: For anyone listening who wants to try it?
+
+Robbie: Clone the repo, and set up Dia for it, `pip install dash e`, write your transcript with labels for each speaker, then run it on the transcript. The repo's "reed me", etc, has the rest.
+
+Alex: Great!
+
+Robbie: Maybe break up longer transcripts so less can go wrong, and you can make changes. If you hit issues, open an issue — I’m still iterating.
+
+Alex: And that’s bomdia. A quiet tool that lets your exact words sound like a real conversation.
+
+Robbie: Something like that. Exactly.

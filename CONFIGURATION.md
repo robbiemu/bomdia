@@ -7,6 +7,10 @@ This guide covers all configuration options available in `config/app.toml` and `
   - [Table of Contents](#table-of-contents)
   - [app.toml Configuration](#apptoml-configuration)
     - [Model Settings](#model-settings)
+      - [dia parameters](#dia-parameters)
+        - [Temperature](#temperature)
+        - [Top p and top k](#top-p-and-top-k)
+    - [Device Selection](#device-selection)
     - [Pipeline Settings](#pipeline-settings)
     - [Director Agent Rate Control](#director-agent-rate-control)
     - [Tags Configuration](#tags-configuration)
@@ -63,6 +67,31 @@ temperature = 1.2
 top_p = 0.95
 cfg_filter_top_k = 45
 use_cfg_filter = false
+````
+
+#### dia parameters
+
+Here are some definitions from the dia tts model.py source code:
+
+-  **max_tokens**: The maximum number of audio tokens to generate per prompt.Defaults to the model´s configured audio length if None.
+-  **cfg_scale**: The scale factor for classifier-free guidance (CFG). Higher values lead to stronger guidance towards the text prompt.
+-  **temperature**: The temperature for sampling. Higher values increase randomness.
+-  **top_p**: The cumulative probability threshold for nucleus (top-p) sampling.
+-  **use_torch_compile**: Whether to compile the generation steps using torch.compile. Can significantly speed up generation after the initial compilation overhead. Defaults to False.
+- **cfg_filter_top_k**: The number of top logits to consider during CFG filtering.
+
+What follows is speculation about these parameters in dia TTS.
+
+##### Temperature
+The way **temperature** works appears to be different than you might expect. A higher temperature primarily effects rate of speech and the incidence of pauses (these decrease with increasing temperature). If you are having trouble with voices changing, you may find it adheres better to the voice when this is set higher (say > 1.6).
+
+##### Top p and top k
+These work in an unusual way as well. A low top_p will not help voices adhere at the cost of monotony. Instead, a lower top_p increases the chance that silence is selected.
+
+The dia project also upped their top_k from 30 to 45.
+
+However, the basic ideas are all familiar. Higher temperature says "weight the choices by some factor" so the best ones stand out more, a higher top p says "try to sample more possible next tokens", and a higher top k says "in case we get too many samples, only consider this many".
+
 
 ### Device Selection
 

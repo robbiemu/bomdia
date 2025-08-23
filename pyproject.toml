@@ -24,6 +24,7 @@ dependencies = [
     "torch~=2.8.0",
     "transformers~=4.55.0",
     "pydantic~=2.11.7",
+    "regex>=2025.7.34",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +41,7 @@ dev = [
     "mypy~=1.11",
     "bandit~=1.7",
     "pre-commit~=4.3",
+    "types-regex>=2025.7.34.20250809",
     "types-toml>=0.10.8.20240310",
 ]
 tracing = [

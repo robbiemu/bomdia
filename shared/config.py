@@ -115,6 +115,21 @@ class Config:
         else:
             self.SEED = None
 
+        self.FULLY_DETERMINISTIC = os.environ.get(
+            "FULLY_DETERMINISTIC",
+            self._file_config.get("pipeline", {}).get("fully_deterministic", False),
+        )
+
+        self.MIN_CHUNK_DURATION = os.environ.get(
+            "MIN_CHUNK_DURATION",
+            self._file_config.get("pipeline", {}).get("min_chunk_duration", 5.0),
+        )
+
+        self.MAX_CHUNK_DURATION = os.environ.get(
+            "MAX_CHUNK_DURATION",
+            self._file_config.get("pipeline", {}).get("max_chunk_duration", 10.0),
+        )
+
         # Verbal tags and line combiners (from file only, as these are lists)
         self.VERBAL_TAGS = self._file_config.get("tags", {}).get(
             "verbal_tags",

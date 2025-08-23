@@ -19,7 +19,7 @@ from shared.config import config
 
 from src.components.audio_generator import (
     DiaTTS,
-    chunk_to_5_10s,
+    chunk_lines,
 )
 from src.components.transcript_parser import (
     ingest_transcript,
@@ -119,7 +119,7 @@ class ChunkProcessor:
     def create_mini_transcripts(processed: List[Dict]) -> List[str]:
         """Create and process mini-transcripts from processed transcript."""
         try:
-            mini_transcripts = chunk_to_5_10s(processed)
+            mini_transcripts = chunk_lines(processed)
             if not mini_transcripts:
                 raise ValueError("No mini-transcripts generated from the input")
 
@@ -376,7 +376,10 @@ class AudioPromptProcessor:
     @staticmethod
     def _get_starting_speaker(chunk: str) -> Optional[str]:
         """Extract the starting speaker from a chunk."""
-        match = re.search(r"^[(S\d+)]", chunk.strip())
+        # Corrected regex:
+        # \[ and \] match the literal brackets.
+        # (S\d+) is the capturing group for the speaker ID.
+        match = re.search(r"^\[(S\d+)\]", chunk.strip())
         return match.group(1) if match else None
 
     @staticmethod

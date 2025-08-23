@@ -1,4 +1,6 @@
 import logging
+import os
+import random
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -87,6 +89,31 @@ class DiaTTS:
         self._voice_prompt_details: Dict[str, Dict[str, Optional[str]]] = {}
         logger.info("Model loaded successfully.")
 
+    def _set_seed(self, seed: int) -> None:
+        """Sets the random seed for reproducibility."""
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+        torch.use_deterministic_algorithms(True)
+        if self.device == "cuda" and torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+
+            # Ensure deterministic behavior for cuDNN (if used)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+
+            if os.getenv("CUBLAS_WORKSPACE_CONFIG") is None:
+                os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        elif self.device == "mps" and torch.backends.mps.is_available():
+            torch.mps.manual_seed(seed)
+            # Enable deterministic behavior for MPS
+            os.environ["PYTORCH_MPS_DETERMINISTIC"] = "1"
+
+        if hasattr(torch.backends.mps, "allow_higher_precision_reduce"):
+            torch.backends.mps.allow_higher_precision_reduce = True
+
     def register_voice_prompts(
         self, voice_prompts: Dict[str, Dict[str, Optional[str]]]
     ) -> None:
@@ -161,6 +188,8 @@ class DiaTTS:
         generate_kwargs.update(config.DIA_GENERATE_PARAMS)
         if self.seed:
             logger.info(f"Using seed {self.seed}")
+            if config.FULLY_DETERMINISTIC:
+                self._set_seed(self.seed)
             generate_kwargs["voice_seed"] = self.seed
         logger.debug(f"Generating with parameters {generate_kwargs}")
 
@@ -176,7 +205,8 @@ class DiaTTS:
             )
 
         # Make the batch call to the model
-        audio_outputs = self.model.generate(**generate_kwargs)
+        with torch.inference_mode():
+            audio_outputs = self.model.generate(**generate_kwargs)
 
         # Ensure audio_outputs is always a list of arrays for consistent processing.
         # The model returns a single array for a single input, and a list of
