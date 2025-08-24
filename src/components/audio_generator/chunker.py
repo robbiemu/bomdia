@@ -7,99 +7,229 @@ from shared.logging import get_logger
 logger = get_logger(__name__)
 
 
+_HYPHENS = r"[\-\u2010\u2011\u2012\u2013\u2014\u2212]+"
+
+
 def count_words_in_text(text: str) -> int:
     """
-    Count words in text, treating each digit as a separate word and handling
-    number units.
+    Rules:
+    - Each digit counts as a word (e.g., '52' -> 2).
+    - Each contiguous run of letters counts as a word ('McFlurry' -> 1).
+    - Hyphenated words split ('cul-de-sac' -> 3).
+    - Speaker tags [S1], [S2], ... are removed.
+    - Punctuation does not count as words.
     """
+    # Remove speaker tags like [S1], [S2]
     clean_text = re.sub(r"\[S\d+\]\s*", "", text)
-    number_unit_pattern = r"\d+(?:[.,\s]?\d+)*"
-    placeholders = []
+    if not clean_text.strip():
+        return 0
 
-    def replace_number_unit(match: re.Match) -> str:
-        unit = match.group(0)
-        placeholders.append(unit)
-        return f"__NUMBER_UNIT_{len(placeholders) - 1}__"
+    total = 0
+    for token in clean_text.split():
+        # 1) Count all digits (each digit is a word)
+        total += len(re.findall(r"[0-9]", token))
 
-    processed_text = re.sub(number_unit_pattern, replace_number_unit, clean_text)
-    words = processed_text.split()
-    total_words = 0
+        # 2) Count letter runs, keeping hyphens as separators (digits replaced by
+        #  spaces)
+        letters_masked = re.sub(r"[0-9]", " ", token)
+        # keep letters and hyphens; turn everything else into spaces
+        letters_masked = re.sub(
+            r"[^\p{L}\-\u2010\u2011\u2012\u2013\u2014\u2212]+", " ", letters_masked
+        )
 
-    for word in words:
-        if word.startswith("__NUMBER_UNIT_"):
-            # Safely extract the index from the placeholder, ignoring any
-            # attached punctuation (e.g., from "__NUMBER_UNIT_0__,")
-            match = re.search(r"__NUMBER_UNIT_(\d+)__", word)
-            if match:
-                idx = int(match.group(1))
-                num_unit = placeholders[idx]
-                # Count each digit in the original number unit as a word
-                total_words += len(re.findall(r"\d", num_unit))
-            else:
-                # Fallback for malformed placeholders: treat as a single word
-                total_words += 1
+        # split on whitespace to get letter runs possibly containing hyphens
+        for run in letters_masked.split():
+            # split hyphenated runs into separate spoken words
+            parts = re.split(_HYPHENS, run)
+            total += sum(1 for p in parts if p)
+
+    return total
+
+
+def protect_numbers(src: str) -> tuple[str, list[str]]:
+    r"""
+    Protect number units matching the pattern /\d+(\D\d+)*/
+    (digit group followed by zero or more non-digit+digit-group pairs).
+    """
+    print(f"\n---protect_numbers processing: {src}---")
+    n = len(src)
+    i = 0
+    out = []
+    placeholders: list[str] = []
+
+    while i < n:
+        ch = src[i]
+        if ch.isdigit():
+            j = i
+
+            # Consume initial digits
+            while j < n and src[j].isdigit():
+                j += 1
+
+            # Now look for pattern: non-digit followed by digits, repeating
+            while j < n:
+                # Check if we have a non-digit character
+                if j < n and not src[j].isdigit():
+                    non_digit_start = j
+                    # Skip the non-digit character
+                    j += 1
+
+                    # Check if followed by digits
+                    if j < n and src[j].isdigit():
+                        # Consume the following digits
+                        while j < n and src[j].isdigit():
+                            j += 1
+                        # Continue the loop to look for more non-digit+digit patterns
+                        continue
+                    else:
+                        # Non-digit not followed by digit, so backtrack
+                        j = non_digit_start
+                        break
+                else:
+                    # No more non-digit characters, we're done with this number unit
+                    break
+
+            unit = src[i:j]
+            ph = f"__NUMBER_UNIT_{len(placeholders)}__"
+            placeholders.append(unit)
+            out.append(ph)
+            i = j
         else:
-            clean_word = re.sub(r"[^\w\'-]", "", word)
-            if clean_word:
-                total_words += 1
+            out.append(ch)
+            i += 1
 
-    return total_words
+    return "".join(out), placeholders
 
 
 def split_by_punctuation(text: str) -> List[str]:
     """
-    Split text into phrases based on punctuation and speaker tags using a robust
-    zero-width split.
+    Split text into phrases based on punctuation, dash-like marks, and speaker tags.
+
+    Rules implemented:
+      - Speaker tags [S1] / [S2] start a new phrase:
+        "[S1] a [S2] b" -> ["[S1] a", "[S2] b"].
+      - Group consecutive punctuation as a single unit:
+        "...", "--", "!?" etc are 1 PUNCT.
+      - Dash-like punctuation (hyphen '-', minus '−', en-dash '–', em-dash '—'):
+          "a PUNCT b" -> ["a", "PUNCT b"].
+        Exception: a single hyphen between word-chars is part of the word ("dead-end").
+      - Typical punctuation (.,?!,) attaches left:
+          "a PUNCT b" -> ["a PUNCT", "b"].
+      - Ellipsis: unicode '…' -> '...' and 3+ periods collapse to '...'.
+      - Numbers: digit groups separated by exactly one char are a unit.
+          - Allows mixing of space and dot within a unit (e.g., "5 000.000").
+          - If a comma is used anywhere, a subsequent space breaks the number unit:
+            "5,000 000.000" -> ["5,000", "000.000"].
     """
-    number_unit_pattern = r"\d+(?:[.,\s]?\d+)*"
-    placeholders = []
+    # 1) Normalize ellipsis and hyphen runs
+    s = re.sub(r"…", "...", text)
+    s = re.sub(r"\.{3,}", "...", s)  # collapse 3+ '.' to '...'
+    s = re.sub(r"-{2,}", "--", s)  # collapse '---' -> '--'
 
-    def replace_with_placeholder(match: re.Match) -> str:
-        unit = match.group(0)
-        placeholders.append(unit)
-        return f"__NUMBER_UNIT_{len(placeholders) - 1}__"
+    # 2) Protect number units using a scanner that enforces the comma+space split rule
+    s, number_placeholders = protect_numbers(s)
 
-    processed = re.sub(number_unit_pattern, replace_with_placeholder, text)
-    processed = re.sub(r"\.{3,}", "...", processed)
-    processed = re.sub(r"-{2,}", "--", processed)
+    # 3) Tokenize and segment according to punctuation + speaker tag rules
+    DASH_CHARS = "-\u2010\u2011\u2012\u2013\u2014\u2212"  # -, ‐, ‑, ‒, –, —, −
+    PUNCT_CHARS = ".,!?," + DASH_CHARS  # grouped punctuation handled here
 
-    # We now split on the zero-width boundary *next to* the punctuation,
-    # not on the whitespace itself. This is far more robust.
-    # Punctuation that ends a phrase. Added em (—) and en (–) dashes.
-    preceding_punct = r"\.\.\.|[?!.,—–]"
-    # Punctuation/tags that start a new phrase.
-    # The hyphen (-) logic is now more complex: it splits only if the hyphen
-    # is NOT adjecent to whitespace characters on either side. This
-    # preserves hyphenated words like "natural-sounding" and "cul-de-sac".
-    # (?<!\S)- : hyphen not preceded by a non-space (e.g., "word -")
-    # -(?!\S)  : hyphen not followed by a non-space (e.g., "- word")
-    following_punct = r"--|(?<!\S)-|-(?!\S)|\[S[0-9]+\]"
+    def is_word_char(c: str) -> bool:
+        return bool(re.match(r"\w", c))
 
-    # The pattern now looks for the boundary itself.
-    split_pattern = re.compile(f"(?<={preceding_punct})|(?={following_punct})")
+    def is_dash_like_char(c: str) -> bool:
+        return c in DASH_CHARS
 
-    # re.split on a zero-width pattern can create empty strings, which we filter out.
-    parts = re.split(split_pattern, processed)
+    def is_punct_char(c: str) -> bool:
+        return c in PUNCT_CHARS
 
-    restored_parts = []
-    for part in parts:
-        # The .strip() here is now essential to remove whitespace that was
-        # not consumed by the split.
-        stripped_part = part.strip()
-        if not stripped_part:
+    def match_tag(buf: str, pos: int) -> Union[str, None]:
+        m = re.match(r"S[12]", buf[pos:])
+        return m.group(0) if m else None
+
+    segments: List[str] = []
+    buf: List[str] = []
+
+    i = 0
+    n = len(s)
+    while i < n:
+        # Speaker tag starts a new segment
+        tag = match_tag(s, i)
+        if tag:
+            part = "".join(buf).strip()
+            if part:
+                segments.append(part)
+            buf = [tag]
+            i += len(tag)
             continue
 
-        def restore_from_placeholder(match: re.Match) -> str:
-            idx = int(match.group(1))
-            return str(placeholders[idx])
+        c = s[i]
 
-        restored = re.sub(
-            r"__NUMBER_UNIT_(\d+)__", restore_from_placeholder, stripped_part
+        # Group punctuation (while respecting the hyphen-in-a-word exception)
+        if is_punct_char(c):
+            # single hyphen inside a word is NOT punctuation
+            if (
+                c == "-"
+                and 0 < i < n - 1
+                and is_word_char(s[i - 1])
+                and is_word_char(s[i + 1])
+            ):
+                buf.append(c)
+                i += 1
+                continue
+
+            # collect a cluster of consecutive punctuation
+            j = i
+            while j < n:
+                cj = s[j]
+                if is_punct_char(cj):
+                    # don't absorb a hyphen that's between word chars
+                    if (
+                        cj == "-"
+                        and 0 < j < n - 1
+                        and is_word_char(s[j - 1])
+                        and is_word_char(s[j + 1])
+                    ):
+                        break
+                    j += 1
+                else:
+                    break
+            cluster = s[i:j]
+
+            # dash-like cluster attaches to the right ("a", "— b")
+            dash_like = is_dash_like_char(cluster[0]) or cluster.startswith("--")
+            if dash_like:
+                part = "".join(buf).strip()
+                if part:
+                    segments.append(part)
+                buf = [cluster]
+            else:
+                # typical punctuation attaches to the left ("a...","b")
+                buf.append(cluster)
+                part = "".join(buf).strip()
+                if part:
+                    segments.append(part)
+                buf = []
+
+            i = j
+            continue
+
+        # regular char
+        buf.append(c)
+        i += 1
+
+    last = "".join(buf).strip()
+    if last:
+        segments.append(last)
+
+    # 4) Restore number placeholders
+    def restore_numbers(chunk: str) -> str:
+        return re.sub(
+            r"__NUMBER_UNIT_(\d+)__",
+            lambda m: number_placeholders[int(m.group(1))],
+            chunk,
         )
-        if restored:
-            restored_parts.append(restored)
 
-    return restored_parts
+    return [restore_numbers(seg) for seg in segments]
 
 
 def soft_cost(duration: float, min_d: float, max_d: float) -> float:
@@ -111,7 +241,9 @@ def soft_cost(duration: float, min_d: float, max_d: float) -> float:
     return 0.0
 
 
-def dp_segment(phrases: List[str], wps: float, min_d: Union[float, str], max_d: Union[float, str]) -> List[str]:
+def dp_segment(
+    phrases: List[str], wps: float, min_d: Union[float, str], max_d: Union[float, str]
+) -> List[str]:
     """Segment phrases using DP with soft-constraint cost."""
     # Convert min_d and max_d to float if they are strings
     if isinstance(min_d, str):

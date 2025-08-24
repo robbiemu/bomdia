@@ -36,8 +36,8 @@ avg_wps = 2.875
 # Optionally define a seed for specific voice pair and genation characteristics
 # seed = 12345
 # fully_deterministic = False
-min_chunk_duration = 4.0
-max_chunk_duration = 8.0
+# min_chunk_duration = 5.0
+# max_chunk_duration = 10.0
 # Whether to generate synthetic voice prompts for unprompted speakers (default: True)
 generate_synthetic_prompts = false
 
