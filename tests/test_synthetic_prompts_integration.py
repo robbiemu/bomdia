@@ -888,8 +888,8 @@ def test_synthetic_prompts_output_dir_creation(tmp_path, monkeypatch):
 [S1] Testing output directory creation.
 [S2] The directory should be created if it doesn't exist.
 [S1] This is a multi-chunk conversation.
-[S2] So we can test the output directory.
-"""
+[S2] So we can test the output directory. Here is another sentence that is really really long so hopefully we get our own chunk.
+"""  # noqa: E501
     )
 
     output_path = tmp_path / "output.mp3"

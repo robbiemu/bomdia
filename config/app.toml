@@ -17,11 +17,11 @@ llm_spec = "cerebras/llama-4-scout-17b-16e-instruct"
 # Uncomment and set any of the following parameters to override the DiaTTS
 # model's internal defaults. Only the parameters you provide will be used.
 # cfg_scale = 3.0
-cfg_scale = 4.5
 # temperature = 1.2
+temperature = 1.6
 # top_p = 0.95
-# top_k = 45
-# max_tokens for audio generation default is 3072
+# cfg_filter_top_k = 45
+# max_tokens = 3072
 # use_torch_compile = false
 
 [model.parameters]
@@ -32,9 +32,12 @@ max_tokens = 4096
 context_window = 2
 pause_placeholder = "[insert-verbal-tag-for-pause]"
 max_tag_rate = 0.25
-avg_wps = 2.5
+avg_wps = 2.875
 # Optionally define a seed for specific voice pair and genation characteristics
 # seed = 12345
+# fully_deterministic = False
+# min_chunk_duration = 5.0
+# max_chunk_duration = 10.0
 # Whether to generate synthetic voice prompts for unprompted speakers (default: True)
 generate_synthetic_prompts = false
 
@@ -71,7 +74,7 @@ line_combiners = [
 
 [director_agent.rate_control]
 # The target ratio of lines that should receive a new verbal tag (e.g., 0.10 for 10%).
-target_tag_rate = 0.16 # TODO - WHY is this separate from max_tag_rate? Why is it in director, the logic is in the graph right?
+target_tag_rate = 0.16
 # The maximum number of "burst" tags the agent can inject above its target rate.
 # This allows it to handle emotionally dense scenes.
 tag_burst_allowance = 3
@@ -91,7 +94,7 @@ rehearsal_checkpoint_path = "rehearsal_checkpoints.sqlite"
 output_dir = "synthetic_prompts"
 
 [audio]
-output_format = "mp3"
+output_format = "flac"
 sampling_rate = 44100
 sample_width = 2
 channels = 1

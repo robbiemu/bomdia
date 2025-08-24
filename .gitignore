@@ -33,7 +33,8 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-# Project specific
+# Agents
+AGENTS.md
 [Ww]arp.md
 QWEN.md
 .qwen/
@@ -42,6 +43,8 @@ GEMINI.[Mm][Dd]
 CRUSH.md
 .crush/
 
+# Project specific
+.env
 project_bundle.zip
 combined.md
 *.mp3
