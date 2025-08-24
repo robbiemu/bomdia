@@ -3,6 +3,8 @@
 
 Bom Dia is a tool that converts text transcripts into podcast-style audio files with verbal tags (like laughter, sighs, etc.) added for a more natural listening experience.
 
+[bomdia podcast sample](https://github.com/user-attachments/files/21959062/bomdia-podcast.all-joined.mp3)
+
 ## Features
 
 - Converts text transcripts to audio podcasts
