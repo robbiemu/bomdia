@@ -127,12 +127,24 @@ pause_placeholder = "[insert-verbal-tag-for-pause]"
 max_tag_rate = 0.25
 
 # Average words per second for audio estimation
-avg_wps = 2.5
+avg_wps = 2.875
 
 # Default random seed for reproducible voice selection
 # Note: When using pure TTS mode for speakers in multi-block transcripts,
 # a seed is mandatory and will be auto-generated if not provided
 seed = 42
+
+# Whether to enable fully deterministic mode for debugging
+# fully_deterministic = false
+
+# Minimum duration for audio chunks in seconds
+# min_chunk_duration = 5.0
+
+# Maximum duration for audio chunks in seconds
+# max_chunk_duration = 10.0
+
+# Whether to generate synthetic voice prompts for unprompted speakers (default: True)
+generate_synthetic_prompts = false
 ```
 
 ### Director Agent Rate Control

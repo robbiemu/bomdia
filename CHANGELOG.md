@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.2.2] - 2025-08-24
+
+### Changed
+- **Major Chunker Refactor**: Replaced the simple time-based chunking logic with a sophisticated dynamic programming (DP) algorithm. This new system (`chunk_lines`) uses advanced text parsing to intelligently split dialogue into phrases and then optimally groups them to respect minimum and maximum duration constraints, significantly improving audio flow and preventing awkward cuts.
+- **Default Configuration Tuning**: Adjusted several default values in `config/app.toml` for better out-of-the-box quality, including `avg_wps`, TTS `temperature`, and the default audio `output_format` is now `flac`.
+
+### Added
+- **Enhanced Seeding and Determinism**: Introduced more robust controls for reproducible audio generation. A `voice_seed` parameter is now passed directly to the TTS model, and a `fully_deterministic` flag in the configuration enables stricter determinism for debugging and consistency.
+- **New Configuration Options**: Added `fully_deterministic`, `min_chunk_duration`, and `max_chunk_duration` to the pipeline configuration to give users more control over the new chunking behavior.
+- **LangSmith Tracing Support**: Added environment variable support for LangSmith tracing to `.env.example` for enhanced observability.
+- **Extensive New Tests**: Added comprehensive unit and integration tests for the new chunker, seeding logic, and pipeline fixes.
+
+### Fixed
+- **Speaker Tag Detection**: Corrected a regex bug in the pipeline that failed to identify the starting speaker of a chunk if there was no leading whitespace.
+
 ## [0.2.1] - 2025-08-21
 
 ### Added

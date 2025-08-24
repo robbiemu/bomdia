@@ -47,7 +47,7 @@ index dd844dd..fc7ac04 100644
  We also changed dia/model.py:
 ```diff
 diff --git a/dia/model.py b/dia/model.py
-index 56a34ef..6128ff1 100644
+index 56a34ef..1a8b2d8 100644
 --- a/dia/model.py
 +++ b/dia/model.py
 @@ -1,6 +1,6 @@
@@ -112,6 +112,15 @@ index 56a34ef..6128ff1 100644
      ) -> torch.Tensor:
          """Performs a single step of the decoder inference.
 
+@@ -437,7 +449,7 @@ class Dia:
+
+         uncond_logits_BxCxV = logits_last_Bx2xCxV[:, 0, :, :]  # Shape [B, C, V]
+         cond_logits_BxCxV = logits_last_Bx2xCxV[:, 1, :, :]  # Shape [B, C, V]
+-        logits_BxCxV = cond_logits_BxCxV + cfg_scale * (cond_logits_BxCxV - uncond_logits_BxCxV)
++        logits_BxCxV = uncond_logits_BxCxV + cfg_scale * (cond_logits_BxCxV - uncond_logits_BxCxV)
+
+         _, top_k_indices_BxCxk = torch.topk(logits_BxCxV, k=top_k, dim=-1)
+         mask_BxCxV = torch.ones_like(logits_BxCxV, dtype=torch.bool)
 @@ -455,12 +467,17 @@ class Dia:
 
          flat_logits_BCxV = logits_BxCxV.view(B * self.config.decoder_config.num_channels, -1)

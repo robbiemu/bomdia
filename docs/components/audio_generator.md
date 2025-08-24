@@ -26,7 +26,7 @@ Main class for text-to-speech conversion using the Dia library.
 Initializes the TTS engine using the Dia library.
 
 **Parameters:**
-- `seed` (int, optional): Random seed for reproducibility
+- `seed` (int, optional): Random seed for reproducibility. This parameter controls the `voice_seed` that is passed directly to the model for enhanced seeding control.
 - `model_checkpoint` (str): The Hugging Face model identifier
 - `device` (str, optional): Device to run on ('cuda', 'mps', or 'cpu')
 - `log_level` (str, optional): Logging level for the TTS model's verbose output ('DEBUG', 'INFO', 'WARNING', 'ERROR')
@@ -46,15 +46,15 @@ Converts text to an audio file using the Dia model.
 
 ### Core Functions
 
-#### `chunk_to_5_10s(lines)`
-Combines line strings into blocks of 5-10 seconds with edge case handling.
+#### `chunk_lines(lines)`
+Combines line strings into blocks using a sophisticated dynamic programming algorithm that intelligently splits dialogue into phrases and then optimally groups them to respect minimum and maximum duration constraints.
 
-Each block is a newline-separated transcript with speaker tags preserved.
+Each block is a newline-separated transcript with speaker tags preserved. The algorithm uses advanced text parsing to identify natural phrase boundaries and then applies dynamic programming to group these phrases into chunks that meet the configured duration constraints.
 
 **Parameters:**
-- `lines` (List[dict]): List of dictionaries with 'speaker' and 'text' keys
+- `lines` (List[dict]): List of dictionaries with 'speaker' and 'text' key
 
-**Returns:** List of transcript blocks as strings, each 5-10 seconds long
+**Returns:** List of transcript blocks as strings, each respecting the min/max duration constraints
 
 #### `estimate_seconds_for_text(text)`
 Estimates the time in seconds for a given text based on average words per second.
@@ -83,6 +83,9 @@ The component uses several configuration values from `config/app.toml`:
 - `AVG_WPS`: Average words per second for timing estimation
 - `SEED`: Random seed for reproducible voice selection
 - `DIA_GENERATE_PARAMS`: Dictionary of parameters for the Dia TTS generation (only parameters explicitly set will be passed to the model)
+- `MIN_CHUNK_DURATION`: Minimum duration in seconds for audio chunks (default: 5.0)
+- `MAX_CHUNK_DURATION`: Maximum duration in seconds for audio chunks (default: 10.0)
+- `FULLY_DETERMINISTIC`: Flag to enable stricter reproducibility for debugging (default: False)
 
 ## Usage Examples
 
